@@ -3,6 +3,7 @@ using namespace std;
 #include <algorithm>
 #include <vector>
 #include <ctime>
+#include <cmath>
 #include "declarations.h"
 
 
@@ -12,14 +13,17 @@ vector<float> folds_stats::logavg() {
     // n = number of folds
     int n = 25;
     float sizeout; 
+    vector<float> segs_in; 
+    vector<float> segs_out;
+    vector<float> tmp; 
 
-    // fold count is just a vector of integers increasing by 1
-    vector<int> f;
-    for (int i = 0; i < n; i++) {
-        f.insert(f.end(), {i + 1});
-    }
+    //// fold count is just a vector of integers increasing by 1
+    //vector<int> f;
+    //for (int i = 0; i < n; i++) {
+    //    f.insert(f.end(), {i + 1});
+    //}
 
-    // Initialize vecs: creases, log(creases), average(log(creases))
+    //// Initialize vecs: creases, log(creases), average(log(creases))
     vector<float> c;
     vector<float> logc;
     vector<float> cavg;
@@ -30,17 +34,18 @@ vector<float> folds_stats::logavg() {
     } 
 
     // loop 4 times to average log(crease values) for accurate statistics.
-    int instance = 4; 
+    const int instance = 4; 
     for (int j = 1; j <= instance; j++) {
         segs_in = { 0,1 };
         // Fold 25 times. Count creases and take their logs
         for (int i = 0; i < n; i++) {
-            segs_out = fold();
+            segs_out = fold(segs_in);
             sizeout = segs_out.size();
-            // number of creases is number of segments - 1
+            // number of creases is number of segments - 1 (should add code to not execute this if x = 0 or 1 -- then log(0) = -inf)
             c[i] = (sizeout / 2) - 1;
             logc[i] = log(c[i]);
             cavg[i] += logc[i];
+
             segs_in = segs_out;
         }
     }
@@ -52,14 +57,14 @@ vector<float> folds_stats::logavg() {
 }
 
 // fold function.  
-vector<float> folds_stats::fold() {
-    
+vector<float> folds_stats::fold(vector<float> segs_in) {
+    vector<float> segs_out;
     // 1 for fold direction left; 0 for right. rand() is seeded in main()
     direct = rand() % 2;
    
     // generates random fold pos.
-    LO = getmin();
-    HI = getmax();
+    LO = getmin(segs_in);
+    HI = getmax(segs_in);
     x = LO + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (HI - LO)));
 
     // check if x in outermost segment
@@ -115,7 +120,7 @@ vector<float> folds_stats::fold() {
 }
 
 // Find min element at beginning of fold() 
-float folds_stats::getmin() {
+float folds_stats::getmin(vector<float> segs_in) {
     size = segs_in.size();
     min = segs_in[0];
     for (int i = 1; i < size; i++) {
@@ -127,7 +132,7 @@ float folds_stats::getmin() {
 }
 
 // Find max element at beginning of fold()
-float folds_stats::getmax() {
+float folds_stats::getmax(vector<float> segs_in) {
     size = segs_in.size();
     max = segs_in[0];
     for (int i = 1; i < size; i++) {

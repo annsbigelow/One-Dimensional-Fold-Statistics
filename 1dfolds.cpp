@@ -1,9 +1,8 @@
 #include <iostream>
 using namespace std;
-#include <algorithm>
 #include <vector>
+#include <ctime>
 #include "declarations.h"
-#include <cstdlib>
 
 
 int main() {
