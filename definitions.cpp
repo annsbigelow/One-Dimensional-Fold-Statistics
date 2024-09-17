@@ -1,63 +1,62 @@
 #include <iostream>
 using namespace std;
 #include <algorithm>
+#include <fstream>
 #include <vector>
 #include <ctime>
 #include <cmath>
 #include "declarations.h"
 
 
-vector<float> folds_stats::logavg() {
+void folds_stats::logavg() {
+    // for random num generating. Only needs to be called once.
+    srand(static_cast <unsigned> (time(0)));
 
-    // Initialize values for later to prevent re-initializing
-    // n = number of folds
-    int n = 25;
-    float sizeout; 
-    vector<float> segs_in; 
-    vector<float> segs_out;
-    vector<float> tmp; 
+    // fold count is just a vector of integers increasing by 1.
+    for (float i = 0; i < n; i++) {
+        f.insert(f.end(), {i + 1});
+    }
 
-    //// fold count is just a vector of integers increasing by 1
-    //vector<int> f;
-    //for (int i = 0; i < n; i++) {
-    //    f.insert(f.end(), {i + 1});
-    //}
-
-    //// Initialize vecs: creases, log(creases), average(log(creases))
-    vector<float> c;
-    vector<float> logc;
-    vector<float> cavg;
     for (int i = 0; i < n; i++) {
         cavg.insert(cavg.end(), { 0 });
         c.insert(c.end(), { 0 });
         logc.insert(logc.end(), { 0 });
     } 
 
-    // loop 4 times to average log(crease values) for accurate statistics.
-    const int instance = 4; 
+    // loop (instance) times to average log(crease values) for accurate statistics. 
     for (int j = 1; j <= instance; j++) {
-        segs_in = { 0,1 };
-        // Fold 25 times. Count creases and take their logs
+        segs_i = { 0,1 };
+        // Fold n times. Count creases and take their logs
         for (int i = 0; i < n; i++) {
-            segs_out = fold(segs_in);
-            sizeout = segs_out.size();
-            // number of creases is number of segments - 1 (should add code to not execute this if x = 0 or 1 -- then log(0) = -inf)
-            c[i] = (sizeout / 2) - 1;
+            segs_o = fold(segs_i);
+            sizeo = segs_o.size();
+            // number of creases is number of segments - 1
+            c[i] = (sizeo / 2) - 1;
             logc[i] = log(c[i]);
             cavg[i] += logc[i];
-
-            segs_in = segs_out;
+            // avoid the case when no fold happened the first time. then log(0) = -inf
+            if (c[i] == 0.0) {
+                c[i] = 1;
+                logc[i] = 0;
+                cavg[i] = 0; 
+            }
+            segs_i = segs_o;
         }
     }
-    // Average the logs of crease values
+    // Print to file to be used in gnuplot
+    ofstream data;
+    data.open("data.txt");
+    // Average the logs of crease values 
     for (int i = 0; i < n; i++) {
         cavg[i] /= instance;
+        data << f[i] << ' ' << cavg[i] << '\n';
     }
-    return cavg;
+    data.close();
+    display(c);
 }
 
 // fold function.  
-vector<float> folds_stats::fold(vector<float> segs_in) {
+vector<float> folds_stats::fold(vector<float> &segs_in) {
     vector<float> segs_out;
     // 1 for fold direction left; 0 for right. rand() is seeded in main()
     direct = rand() % 2;
@@ -120,7 +119,7 @@ vector<float> folds_stats::fold(vector<float> segs_in) {
 }
 
 // Find min element at beginning of fold() 
-float folds_stats::getmin(vector<float> segs_in) {
+float folds_stats::getmin(vector<float> &segs_in) {
     size = segs_in.size();
     min = segs_in[0];
     for (int i = 1; i < size; i++) {
@@ -132,7 +131,7 @@ float folds_stats::getmin(vector<float> segs_in) {
 }
 
 // Find max element at beginning of fold()
-float folds_stats::getmax(vector<float> segs_in) {
+float folds_stats::getmax(vector<float> &segs_in) {
     size = segs_in.size();
     max = segs_in[0];
     for (int i = 1; i < size; i++) {
@@ -151,11 +150,4 @@ void folds_stats::display(vector<float> arr) {
     }
 }
 
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
 
