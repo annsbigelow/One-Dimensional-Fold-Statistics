@@ -1,0 +1,1 @@
+seg_collect.o: seg_collect.cc seg_collect.hh
