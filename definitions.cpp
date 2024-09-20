@@ -52,7 +52,6 @@ void folds_stats::logavg() {
         data << f[i] << ' ' << cavg[i] << '\n';
     }
     data.close();
-    display(c);
 }
 
 // fold function.  

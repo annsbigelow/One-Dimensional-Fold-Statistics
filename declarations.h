@@ -11,9 +11,9 @@ class folds_stats {
 		int direct, size;
 		float LO, HI, seg_l, seg_r, x, min, max, sizeo;
 		vector<float> segs_i, segs_o, c, logc, cavg, f;
-		const int instance = 350;
+		const int instance = 10000;
 		// n = number of folds
-		const int n = 28;
+		const int n = 53;
 
 
 		void logavg();
