@@ -8,19 +8,21 @@ using namespace std;
 class folds_stats {
 	public: 
 		// Initializing variables 
-		int direct, size;
-		float LO, HI, seg_l, seg_r, x, min, max, sizeo;
-		vector<float> segs_i, segs_o, c, logc, cavg, f;
-		const int instance = 600;
+		int direct, size, sizeo;
+		double LO, HI, seg_l, seg_r, x, min, max;
+		vector<double> segs_i, segs_o, c, logc, cavg; 
+		vector<int> f;
+		// instance = number of iterations to take avg over
+		const int instance = 300;
 		// n = number of folds
-		const int n = 53;
+		const int n = 26;
 
 
 		void logavg();
-		vector<float> fold(vector<float> &segs_in);
-		float getmin(vector<float> &segs_in);
-		float getmax(vector<float> &segs_in);
-		void display(vector<float> arr);
+		vector<double> fold(vector<double> &segs_in);
+		double getmin(vector<double> &segs_in);
+		double getmax(vector<double> &segs_in);
+		void display(vector<double> arr);
 };
 
 #endif
