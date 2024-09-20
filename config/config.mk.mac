@@ -1,0 +1,22 @@
+# Compiler and compilation flags
+cc=gcc
+cxx=g++-mp-14 -fopenmp
+cflags=-Wall -ansi -pedantic -march=native -O3
+
+# MPI compiler
+mpicxx=mpicxx -Wno-long-long
+
+# Flags for linking to PNG library
+png_iflags=-DHAS_PNG -I/opt/local/include
+png_lflags=-L/opt/local/lib -lpng
+
+# Flags for FFTW library
+fftw_iflags=-I/opt/local/include
+fftw_lflags=-L/opt/local/lib -lfftw3
+
+# Flags for GSL
+gsl_iflags=`gsl-config --cflags`
+gsl_lflags=`gsl-config --libs`
+
+# LAPACK flags for linear algebra
+lp_lflags=-framework Accelerate
