@@ -14,13 +14,13 @@ void folds_stats::logavg() {
 
     // fold count is just a vector of integers increasing by 1.
     for (int i = 0; i < n; i++) {
-        f.insert(f.end(), {i + 1});
+        f.push_back(i + 1);
     }
 
     for (int i = 0; i < n; i++) {
-        cavg.insert(cavg.end(), { 0 });
-        c.insert(c.end(), { 0 });
-        logc.insert(logc.end(), { 0 });
+        cavg.push_back(0);
+        c.push_back(0);
+        logc.push_back(0);
     } 
 
     // Loop (instance) times to average log(crease values) for accurate statistics. 
@@ -52,6 +52,7 @@ void folds_stats::logavg() {
         data << f[i] << ' ' << cavg[i] << '\n';
     }
     data.close();
+    display(c);
 }
  
 vector<double> folds_stats::fold(vector<double> &segs_in) {
@@ -69,7 +70,7 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
 
         // loop through each segment
         size = segs_in.size();
-        for (int i = 0; i < size; i += 2) {
+        for (long i = 0; i < size; i += 2) {
 
             // identify i'th segment
             seg_l = segs_in[i];
@@ -78,33 +79,43 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
             // right fold
             if (direct == 0) {
                 if (seg_l < x && x < seg_r) {
-                    segs_out.insert(segs_out.end(), { x, (2 * x) - seg_l });
-                    segs_out.insert(segs_out.end(), { x, seg_r });
+                    segs_out.push_back(x);
+                    segs_out.push_back((2 * x) - seg_l);
+                    segs_out.push_back(x);
+                    segs_out.push_back(seg_r);
                 }
                 else if (x > seg_r) {
-                    segs_out.insert(segs_out.end(), { (2 * x) - seg_r, (2 * x) - seg_l });
+                    segs_out.push_back((2 * x) - seg_r);
+                    segs_out.push_back((2 * x) - seg_l);
                 }
                 else if (x <= seg_l) {
-                    segs_out.insert(segs_out.end(), { seg_l, seg_r });
+                    segs_out.push_back(seg_l);
+                    segs_out.push_back(seg_r);
                 }
                 else if (x == seg_r) {
-                    segs_out.insert(segs_out.end(), { x, (2 * x) - seg_l });
+                    segs_out.push_back(x);
+                    segs_out.push_back((2 * x) - seg_l);
                 }
             }
             // left fold
             else if (direct == 1) {
                 if (seg_l < x && x < seg_r) {
-                    segs_out.insert(segs_out.end(), { seg_l, x });
-                    segs_out.insert(segs_out.end(), { (2 * x) - seg_r, x });
+                    segs_out.push_back(seg_l);
+                    segs_out.push_back(x);
+                    segs_out.push_back((2 * x) - seg_r);
+                    segs_out.push_back(x);
                 }
                 else if (x < seg_l) {
-                    segs_out.insert(segs_out.end(), { (2 * x) - seg_r, (2 * x) - seg_l });
+                    segs_out.push_back((2 * x) - seg_r);
+                    segs_out.push_back((2 * x) - seg_l);
                 }
                 else if (x >= seg_r) {
-                    segs_out.insert(segs_out.end(), { seg_l, seg_r });
+                    segs_out.push_back(seg_l);
+                    segs_out.push_back(seg_r);
                 }
                 else if (x == seg_l) {
-                    segs_out.insert(segs_out.end(), { (2 * x) - seg_r, x });
+                    segs_out.push_back((2 * x) - seg_r);
+                    segs_out.push_back(x);
                 }
             }
         }
