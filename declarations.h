@@ -15,7 +15,7 @@ class folds_stats {
 		// instance = number of iterations to take avg over
 		const int instance = 300;
 		// n = number of folds
-		const int n = 26;
+		const int n = 20;
 
 
 		void logavg();
