@@ -14,9 +14,9 @@ class folds_stats {
 		vector<double> segs_i, segs_o, c, logc, cavg; 
 		vector<int> f;
 		// instance = number of iterations to take avg over
-		const int instance = 500;
+		const int instance = 5000;
 		// n = number of folds
-		const int n = 40;
+		const int n = 53;
 
 
 		void logavg();
