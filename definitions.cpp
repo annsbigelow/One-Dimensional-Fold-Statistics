@@ -131,7 +131,7 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
 double folds_stats::getmin(vector<double> &segs_in) {
     size = segs_in.size();
     min = segs_in[0];
-    for (int i = 1; i < size; i++) {
+    for (long i = 1; i < size; i++) {
         if (segs_in[i] < min) {
             min = segs_in[i];
         }
@@ -143,7 +143,7 @@ double folds_stats::getmin(vector<double> &segs_in) {
 double folds_stats::getmax(vector<double> &segs_in) {
     size = segs_in.size();
     max = segs_in[0];
-    for (int i = 1; i < size; i++) {
+    for (long i = 1; i < size; i++) {
         if (segs_in[i] > max) {
             max = segs_in[i];
         }
@@ -154,7 +154,7 @@ double folds_stats::getmax(vector<double> &segs_in) {
 
 // Display vec function. For debug purposes only
 void folds_stats::display(vector<double> arr) {
-    for (int i = 0; i < arr.size(); i++) {
+    for (long i = 0; i < arr.size(); i++) {
         cout << arr[i] << '\n';
     }
 }
