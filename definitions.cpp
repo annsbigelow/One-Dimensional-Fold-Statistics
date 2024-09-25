@@ -3,14 +3,15 @@ using namespace std;
 #include <algorithm>
 #include <fstream>
 #include <vector>
-#include <ctime>
+//#include <ctime>
 #include <cmath>
 #include "declarations.h"
+#include "gsl/gsl_rng.h"
 
 
 void folds_stats::logavg() {
     // Seed the RNG
-    srand(static_cast <unsigned> (time(0)));
+    //srand(static_cast <unsigned> (time(0)));
 
     // fold count is just a vector of integers increasing by 1.
     for (int i = 0; i < n; i++) {
@@ -63,7 +64,8 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
     // generates random fold pos.
     LO = getmin(segs_in);
     HI = getmax(segs_in);
-    x = LO + static_cast <double> (rand()) / (static_cast <double> (RAND_MAX / (HI - LO)));
+    //x = LO + static_cast <double> (rand()) / (static_cast <double> (RAND_MAX / (HI - LO)));
+    x = gsl_rng_uniform(rng);
 
     // check if x in outermost segment
     if (LO < x && x < HI) {
