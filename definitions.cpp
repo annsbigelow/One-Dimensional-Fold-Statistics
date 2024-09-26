@@ -3,33 +3,33 @@ using namespace std;
 #include <algorithm>
 #include <fstream>
 #include <vector>
-//#include <ctime>
+#include <ctime>
 #include <cmath>
 #include "declarations.h"
-#include "gsl/gsl_rng.h"
+#include <gsl/gsl_rng.h>
 
 
 void folds_stats::logavg() {
-    // Seed the RNG
-    //srand(static_cast <unsigned> (time(0)));
 
     // fold count is just a vector of integers increasing by 1.
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n ; i++) {
         f.push_back(i + 1);
     }
 
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n ; i++) {
         cavg.push_back(0);
         c.push_back(0);
         logc.push_back(0);
     } 
-
+    long int k = static_cast<long int> (time(NULL)); 
     // Loop (instance) times to average log(crease values) for accurate statistics. 
     for (int j = 1; j <= instance; j++) {
         segs_i = { 0,1 };
         // Fold n times. Count creases and take their logs
         for (int i = 0; i < n; i++) {
+            seed(k); // Seed the generator with an int. This should be re-seeded before every fold(). 
             segs_o = fold(segs_i);
+            //display(segs_o);
             sizeo = segs_o.size();
             // Number of creases is number of segments - 1
             c[i] = (sizeo / 2) - 1;
@@ -42,30 +42,34 @@ void folds_stats::logavg() {
                 cavg[i] = 0; 
             }
             segs_i = segs_o;
+            k = k + 1;
         }
+        
     }
     // Print to file to be used in gnuplot
     ofstream data;
     data.open("data.txt");
     // Average the logs of crease values 
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n ; i++) {
         cavg[i] /= instance;
         data << f[i] << ' ' << cavg[i] << '\n';
     }
     data.close();
-    display(c);
+    display(c); // WHY DOES C END IN 0 ? 
 }
  
 vector<double> folds_stats::fold(vector<double> &segs_in) {
-    vector<double> segs_out;
+    vector<double> segs_out;  // Include in class construction ?? If you do, you get very large crease values
     // 1 for fold direction left; 0 for right.
     direct = rand() % 2;
    
     // generates random fold pos.
     LO = getmin(segs_in);
     HI = getmax(segs_in);
-    //x = LO + static_cast <double> (rand()) / (static_cast <double> (RAND_MAX / (HI - LO)));
-    x = gsl_rng_uniform(rng);
+
+    //cout << gsl_rng_uniform(rng) << '\n';
+    x = (HI - LO)*gsl_rng_uniform(rng) + LO;
+    // NOTE: UNIFORM RANGE INCLUDES 0.0 BUT EXCLUDES 1.0
 
     // check if x in outermost segment
     if (LO < x && x < HI) {
@@ -81,7 +85,7 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
             // right fold
             if (direct == 0) {
                 if (seg_l < x && x < seg_r) {
-                    segs_out.push_back(x);
+                    segs_out.push_back(x); // IS segs_out AN EMPTY VEC AT FIRST?
                     segs_out.push_back((2 * x) - seg_l);
                     segs_out.push_back(x);
                     segs_out.push_back(seg_r);
