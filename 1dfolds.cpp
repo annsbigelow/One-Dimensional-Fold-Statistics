@@ -10,7 +10,7 @@ int main() {
     folds_stats fs; 
     
     //fs.log_fixedn();
-    int n = 40;
+    int n = 160;
     fs.segdens(n);
     printf("Time elapsed is %g s\n", omp_get_wtime() - t0);
 

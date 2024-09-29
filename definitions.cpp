@@ -10,33 +10,48 @@ using namespace std;
 
 
 void folds_stats::segdens(int &numplaces) {
-
-    segs_i = { 0,1 };
-    for (int i = 0; i < n; i++) {
-        seed(k);
-        segs_o = fold(segs_i);
-        segs_i = segs_o;
-        k = k + 1;
-    }
-
-    lo = getmin(segs_o);
-    hi = getmax(segs_o);
-    domain = linspace(lo, hi, numplaces); // possible error: input const double, where lo and hi are doubles?
-    range.clear();
+    pavg.clear();
+    domavg.clear();
     for (int i = 0; i < numplaces; i++) {
-        range.push_back(0);
+        domavg.push_back(0);
+        pavg.push_back(0);
     }
-    // size of domain, range will be numplaces
-    for (int i = 0; i < segs_o.size(); i+=2) {
-        for (int m = 0; m < numplaces; m++) {
-            if (segs_o[i] < domain[m] && domain[m] < segs_o[i + 1]) {
-                range[m] += 1;
+    for (int w = 0; w < instance; w++) {
+        segs_i = { 0,1 };
+        for (int i = 0; i < n; i++) {
+            seed(k);
+            segs_o = fold(segs_i);
+            segs_i = segs_o;
+            k = k + 1;
+        }
+
+        lo = getmin(segs_o);
+        hi = getmax(segs_o);
+        domain = linspace(lo, hi, numplaces); 
+        range.clear();
+        for (int i = 0; i < numplaces; i++) {
+            range.push_back(0);
+        }
+
+        for (int i = 0; i < segs_o.size(); i += 2) {
+            for (int m = 0; m < numplaces; m++) {
+                if (segs_o[i] < domain[m] && domain[m] < segs_o[i + 1]) {
+                    range[m] += 1;
+                }
             }
         }
+
+        for (int i = 0; i < numplaces; i++) {
+            domavg[i] += domain[i];
+            pavg[i] += range[i];
+        }
     }
-    densData.open("densData.txt");
+
+    densData.open("densData1.txt");
     for (int j = 0; j < numplaces; j++) {
-        densData << domain[j] << ' ' << range[j] << '\n';
+        domavg[j] /= instance;
+        pavg[j] /= instance;
+        densData << domavg[j] << ' ' << pavg[j] << '\n';
     }
     densData.close();
 }
@@ -130,7 +145,7 @@ void folds_stats::logavg() {
     data.close();
     //display(c); 
 }
- 
+
 vector<double> folds_stats::fold(vector<double> &segs_in) {
     vector<double> segs_out;  // Include in class construction ?? If you do, you get very large crease values
     // 1 for fold direction left; 0 for right.
