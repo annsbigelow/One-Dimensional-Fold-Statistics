@@ -9,7 +9,9 @@ int main() {
     double t0 = omp_get_wtime();
     folds_stats fs; 
     
-    fs.logavg();
+    //fs.log_fixedn();
+    int n = 40;
+    fs.segdens(n);
     printf("Time elapsed is %g s\n", omp_get_wtime() - t0);
 
     return 0;
