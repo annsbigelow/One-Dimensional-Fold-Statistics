@@ -11,10 +11,13 @@ int main() {
     
     //fs.log_fixedn();
     int n = 160;
-#pragma omp parallel for
-    for(int j=0;j<16;j++) {
+#pragma omp parallel
+    {
         int max_t=omp_get_max_threads(),th=omp_get_thread_num();
-        printf("j=%d is processed by %d of %d threads\n",th,max_t);
+        printf("Hello from %d of %d threads\n",th,max_t);
+
+#pragma omp for schedule(dynamic)
+        for(int j=0;j<400;j++) printf("j=%d thr=%d\n",j,th);
 
         //folds_stats fs; 
         //fs.segdens(n);
