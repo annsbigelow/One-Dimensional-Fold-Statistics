@@ -13,14 +13,9 @@ int main() {
     int n = 160;
 #pragma omp parallel
     {
-        int max_t=omp_get_max_threads(),th=omp_get_thread_num();
-        printf("Hello from %d of %d threads\n",th,max_t);
-
-#pragma omp for schedule(dynamic)
-        for(int j=0;j<400;j++) printf("j=%d thr=%d\n",j,th);
-
-        //folds_stats fs; 
-        //fs.segdens(n);
+        int th=omp_get_thread_num();
+        folds_stats fs(th);
+        fs.segdens(n);
     }
 
 

@@ -47,7 +47,9 @@ void folds_stats::segdens(int &numplaces) {
         }
     }
 
-    densData.open("densData1.txt");
+    char buf[128];
+    sprintf(buf,"densData%d.txt",th);
+    densData.open(buf);
     for (int j = 0; j < numplaces; j++) {
         domavg[j] /= instance;
         pavg[j] /= instance;

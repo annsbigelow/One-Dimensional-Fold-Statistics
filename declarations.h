@@ -10,7 +10,8 @@ using namespace std;
 
 class folds_stats {
 	public: 
-		// Initializing variables 
+		// Initializing variables
+        const int th;
 		int direct;
 		long size, sizeo;
 		double LO, HI, seg_l, seg_r, x, min, max, step, lo, hi;
@@ -25,8 +26,10 @@ class folds_stats {
 		long int k = static_cast<long int> (time(NULL));
 
 		// Class constructor "dynamically allocates memory for initial number of slots." Written as an initializer list: same as writing rng  = gsl_rng_alloc(...)
-		folds_stats() : direct(0), HI(1), LO(0), seg_l(0), seg_r(1), x(0), min(0), max(1), step(0), lo(0), hi(0), segs_i({ 0 }), segs_o({ 0 }), c({ 0 }), logc({ 0 }), cavg({ 0 }),
-			linpoints({ 0 }), domain({ 0 }), range({ 0 }), domavg({ 0 }), pavg({ 0 }), size(1), sizeo(1), rng(gsl_rng_alloc(gsl_rng_taus2)) {} // Creates instance of the Tausworthe generator
+		folds_stats(int th_=1) : th(th_), direct(0), HI(1), LO(0), seg_l(0), seg_r(1), x(0), min(0), max(1), step(0), lo(0), hi(0), segs_i({ 0 }), segs_o({ 0 }), c({ 0 }), logc({ 0 }), cavg({ 0 }),
+			linpoints({ 0 }), domain({ 0 }), range({ 0 }), domavg({ 0 }), pavg({ 0 }), size(1), sizeo(1), rng(gsl_rng_alloc(gsl_rng_taus2)) {seed(th+1);
+            // TODO - could seed RNG one time here, with a number unique to the thread (i.e. th)
+            } // Creates instance of the Tausworthe generator
 		// initializing variables without values is sketchy. If you do, the compiler gives these some val anyway or gives error
 		
 		// Class destructor " frees dynamically allocated memory " 
