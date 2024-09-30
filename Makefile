@@ -5,7 +5,7 @@ cextra=$(cflags) --std=c++11
 
 objs=definitions.o
 src=$(patsubst %.o,%.cpp,$(objs))
-execs=1dfolds
+execs=1dfolds 1dfolds_mt
 
 all: $(execs)
 
@@ -15,7 +15,10 @@ depend: $(src)
 -include Makefile.dep
 
 1dfolds: 1dfolds.cpp $(objs)
-	$(cxx) $(cextra) -o $@ $^
+	$(cxx) $(cextra) $(gsl_lflags) $(gsl_iflags) -o $@ $^
+
+1dfolds_mt: 1dfolds_mt.cpp $(objs)
+	$(cxx) $(cextra) $(gsl_lflags) $(gsl_iflags) -o $@ $^
 
 %.o: %.cpp
 	$(cxx) $(cextra) $(gsl_iflags) -c $<

@@ -18,9 +18,9 @@ class folds_stats {
 		//vector < double> segs_out; // Initializing value?? 
 		vector<int> f;
 		// instance = number of iterations to take avg over (TEST segdens)
-		const int instance = 10000;
+		const int instance = 100;
 		// n = number of folds (TEST segdens)
-		const int n = 26;
+		const int n = 12;
 
 		long int k = static_cast<long int> (time(NULL));
 
