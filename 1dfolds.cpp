@@ -8,8 +8,8 @@ using namespace std;
 int main() {
     double t0 = omp_get_wtime();
     
-    omp_set_num_threads(4);
-//#pragma omp parallel
+  //  omp_set_num_threads(4);
+#pragma omp parallel
     {
         int s_divide = 200;
         //int th = omp_get_thread_num();

@@ -21,7 +21,7 @@ class folds_stats {
 		// instance = number of iterations to take avg over
 		const int instance = 10000;
 		// n = number of folds 
-		const int n = 40;
+		const int n = 20;
 
 		// Class constructor 
 		// seeds rng upon class instance creation

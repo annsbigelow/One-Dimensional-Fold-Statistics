@@ -45,8 +45,9 @@ void folds_stats::segdens(int &numplaces) {
             }
         }
         for (int j = 0; j < numplaces; j++) {
-            sum += range[j] / numplaces; // the un-normalized integral
+            sum += range[j]; // the un-normalized integral
         }
+        sum /= numplaces;
         for (int i = 0; i < numplaces; i++) {
             //domavg[i] += domain[i];
             normy[i] = range[i] / sum; // normalize y-axis to integrate to 1.
