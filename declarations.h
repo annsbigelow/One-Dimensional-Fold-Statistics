@@ -51,7 +51,7 @@ class folds_stats {
 		ofstream densData;
 		ofstream densData1;
 
-private: // Only accessible in class
+//private: // Only accessible in class
 	gsl_rng* rng;
 };
 
