@@ -5,56 +5,68 @@ using namespace std;
 #include <vector>
 #include <ctime>
 #include <cmath>
+#include <omp.h>
 #include "declarations.h"
 #include <gsl/gsl_rng.h>
 
 
 void folds_stats::segdens(int &numplaces) {
     pavg.clear();
-    domavg.clear();
+    normx.clear();
+    normy.clear();
     for (int i = 0; i < numplaces; i++) {
-        domavg.push_back(0);
         pavg.push_back(0);
+        normx.push_back(0);
+        normy.push_back(0);
     }
+
     for (int w = 0; w < instance; w++) {
+        //cout << omp_get_thread_num() << '\n';
         segs_i = { 0,1 };
         for (int i = 0; i < n; i++) {
-            seed(k);
             segs_o = fold(segs_i);
             segs_i = segs_o;
-            k = k + 1;
         }
 
         lo = getmin(segs_o);
         hi = getmax(segs_o);
-        domain = linspace(lo, hi, numplaces); 
+        domain = linspace(lo, hi, numplaces); // each step is 1/numplaces
         range.clear();
         for (int i = 0; i < numplaces; i++) {
             range.push_back(0);
         }
 
+        // scan across final segment
         for (int i = 0; i < segs_o.size(); i += 2) {
             for (int m = 0; m < numplaces; m++) {
-                if (segs_o[i] < domain[m] && domain[m] < segs_o[i + 1]) {
+                if (segs_o[i] <= domain[m] && domain[m] <= segs_o[i + 1]) {
                     range[m] += 1;
                 }
             }
         }
-
-        for (int i = 0; i < numplaces; i++) {
-            domavg[i] += domain[i];
-            pavg[i] += range[i];
+        for (int j = 0; j < numplaces; j++) {
+            sum += range[j] / numplaces; // the un-normalized integral
         }
+        for (int i = 0; i < numplaces; i++) {
+            //domavg[i] += domain[i];
+            normy[i] = range[i] / sum; // normalize y-axis to integrate to 1.
+            pavg[i] += normy[i];
+        }
+        //if (w == 0) { cout << gsl_rng_uniform(rng) << '\n'; }
+        sum = 0;
     }
 
-    char buf[128];
-    sprintf(buf,"densData%d.txt",th);
-    densData.open(buf);
+    /*char buf[128];
+    sprintf(buf,"NormSegDens_testomp%d.txt",th);
+    densData.open(buf);*/
+
+    densData.open("NormSegDens_testNoOmp.txt");
     for (int j = 0; j < numplaces; j++) {
-        domavg[j] /= instance;
+        //domavg[j] /= instance;
+        normx[j] = (domain[j] - lo) / (hi - lo); // normalize x-axis
         pavg[j] /= instance;
-        densData << domavg[j] << ' ' << pavg[j] << '\n';
-    }
+        densData << normx[j] << ' ' << pavg[j] << '\n';
+    } 
     densData.close();
 }
 
@@ -75,7 +87,6 @@ void folds_stats:: log_fixedn(){
     for (int j = 1; j <= instance; j++) {
         segs_i = { 0,1 };
         for (int i = 0; i < n; i++) {
-            seed(k); 
             segs_o = fold(segs_i);
             sizeo = segs_o.size();
             c[i] = (sizeo / 2) - 1;
@@ -85,7 +96,6 @@ void folds_stats:: log_fixedn(){
                 logc[i] = 0;
             }
             segs_i = segs_o;
-            k = k + 1;
         }
         for (int i = 0; i < n; i++) {
             data << logc[n-1] << '\n';
@@ -117,7 +127,6 @@ void folds_stats::logavg() {
         segs_i = { 0,1 };
         // Fold n times. Count creases and take their logs
         for (int i = 0; i < n; i++) {
-            seed(k); // Seed the generator with an int. This should be re-seeded before every fold(). 
             segs_o = fold(segs_i);
             //display(segs_o);
             sizeo = segs_o.size();
@@ -132,32 +141,30 @@ void folds_stats::logavg() {
                 cavg[i] = 0; 
             }
             segs_i = segs_o;
-            k = k + 1;
         }
         
     }
     // Print logc file 
     ofstream data;
-    data.open("data.txt");
+    data.open("test.txt");
     // Average the logs of crease values 
     for (int i = 0; i < n ; i++) {
         cavg[i] /= instance;
         data << f[i] << ' ' << cavg[i] << '\n';
     }
     data.close();
-    //display(c); 
+    display(c); 
 }
 
 vector<double> folds_stats::fold(vector<double> &segs_in) {
     vector<double> segs_out;  // Include in class construction ?? If you do, you get very large crease values
     // 1 for fold direction left; 0 for right.
-    direct = rand() % 2;
+    direct = rand() % 2; // convert to GSL RNG?
    
     // generates random fold pos.
     LO = getmin(segs_in);
     HI = getmax(segs_in);
 
-    //cout << gsl_rng_uniform(rng) << '\n';
     x = (HI - LO)*gsl_rng_uniform(rng) + LO;
     // NOTE: UNIFORM RANGE INCLUDES 0.0 BUT EXCLUDES 1.0
 
