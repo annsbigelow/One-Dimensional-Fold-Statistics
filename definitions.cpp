@@ -61,7 +61,7 @@ void folds_stats::segdens(int &numplaces) {
     sprintf(buf,"NormSegDens_testomp%d.txt",th);
     densData.open(buf);*/
 
-    densData.open("NormSegDens_ompN60.txt");
+    densData.open("NormSegDens_omptest.txt");
     for (int j = 0; j < numplaces; j++) {
         //domavg[j] /= instance;
         normx[j] = (domain[j] - lo) / (hi - lo); // normalize x-axis
