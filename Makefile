@@ -15,8 +15,7 @@ depend: $(src)
 -include Makefile.dep
 
 1dfolds: 1dfolds.cpp $(objs)
-	$(cxx) $(cextra) -o $@ $^
-
+	$(cxx) $(cextra) -o $@ $^ $(gsl_cflags)
 
 %.o: %.cpp
 	$(cxx) $(cextra) $(gsl_iflags) -c $<
