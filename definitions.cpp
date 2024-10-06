@@ -11,6 +11,16 @@ using namespace std;
 
 
 void folds_stats::segdens(int &numplaces) {
+
+    // CHR: pavg, normx, and normy only exist within this function so you
+    // declare them locally instead of as class members. In addition, you know
+    // their size exactly, so this is a case where the extensibility
+    // of vectors isn't needed. You could do
+    //
+    // double *pavg=new double[numplaces];
+    // for(int i=0;i<numplaces) pavg[i]=0;
+    //
+    // Similar for the other cases.
     pavg.clear();
     normx.clear();
     normy.clear();
@@ -37,11 +47,48 @@ void folds_stats::segdens(int &numplaces) {
         }
 
         // scan across final segment
+        double fac=numplaces/(hi-lo);
         for (int i = 0; i < segs_o.size(); i += 2) {
+
+            // CHR: In general, I think that this binning procedure works. But
+            // it seems to assume that all of your segments are properly aligned,
+            // so segs_o[i]<segs_o[i+1]. If it's the other way round, then the
+            // segment won't get binned anywhere.
+            //
+            // Another issue here is that you have to do a for-loop over all
+            // bins. It can be done more efficiently than this.
             for (int m = 0; m < numplaces; m++) {
                 if (segs_o[i] <= domain[m] && domain[m] <= segs_o[i + 1]) {
                     range[m] += 1;
                 }
+            }
+
+            // CHR: Here's a more efficient way to do it, without looping over all
+            // of the data. I'm also assuming that the segments might not have
+            if(false) {
+                int mlo=int((segs_o[i]-lo)*fac),mhi=int((segs_o[i+1]-lo)*fac);
+                if(mhi>mlo) {int o=mlo;mlo=mhi;mhi=o;}
+                if(mlo<0) mlo=0;else if(mlo>numplaces) mlo=numplaces;
+                if(mhi<0) mhi=0;else if(mhi>numplaces) mhi=numplaces;
+                for(int m=mlo;m<mhi;m++) range[m]+=1;
+            }
+
+            // CHR: Here's an even better way to do it. The previous approaches
+            // only bin segments when they specific values (given by the
+            // domain[m] values in the original version). But we might have
+            // many segments that lie wholly between domain[m] and domain[m+1].
+            // Currently they'd just be omitted. We could improve this by
+            // binning them according to the fraction of the range between
+            // domain[m] and domain[m+1] that they cover.
+            if(false) {
+                double x=(segs_o[i]-lo)*fac,y=(segs_o[i+1]-lo)*fac,z;
+                if(x>y) {double z=x;x=y;y=z;}
+                int mlo=int(x),mhi=int(y);
+                if(mlo<0) mlo=0;else if(mlo>=numplaces) mlo=numplaces-1;
+                if(mhi<0) mhi=0;else if(mhi>=numplaces) mhi=numplaces-1;
+                range[mlo]-=x-mlo;   // Account for first bin only being partially covered
+                for(int m=mlo;m<=mhi;m++) range[m]+=1;
+                range[mhi]-=mhi+1-y;  // Account for last bin only being partially covered
             }
         }
         for (int j = 0; j < numplaces; j++) {
@@ -64,11 +111,23 @@ void folds_stats::segdens(int &numplaces) {
     densData.open("NormSegDens_omptest.txt");
     for (int j = 0; j < numplaces; j++) {
         //domavg[j] /= instance;
+        //
+        // CHR: It's unclear to me why hi and lo enter in here. They will be set by
+        // the final instance. I don't see why those final values would be relevant
+        // for the outputting this data.
         normx[j] = (domain[j] - lo) / (hi - lo); // normalize x-axis
         pavg[j] /= instance;
         densData << normx[j] << ' ' << pavg[j] << '\n';
+
+        // CHR: For the third method, if you have spacing h=1/numplaces, each bin covers
+        // [j*h,(j+1)*h]. So it would make sense to use an x coordinate halfway
+        // between them, like
+        // densData << (j+0.5)*h << ' ' << pavg[j] << '\n';
     } 
     densData.close();
+
+    // CHR: With arrays, you'd need to add lines like this here:
+    // delete [] pavg;
 }
 
 void folds_stats:: log_fixedn(){
