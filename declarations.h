@@ -15,7 +15,7 @@ class folds_stats {
 		int direct;
 		long size, sizeo;
 		double LO, HI, seg_l, seg_r, x, min, max, step, lo, hi, sum;
-		vector<double> segs_i, segs_o, c, logc, cavg, linpoints, domain, range,pavg,normx, normy;
+		vector<double> segs_i, segs_o, c, logc, cavg;
 		//vector < double> segs_out; // Initializing value?? 
 		vector<int> f;
 		// instance = number of iterations to take avg over
@@ -26,7 +26,7 @@ class folds_stats {
 		// Class constructor 
 		// seeds rng upon class instance creation
 		folds_stats(int th_=1) : th(th_), direct(0), HI(1), LO(0), seg_l(0), seg_r(1), x(0), min(0), max(1), step(0), lo(0), hi(0), sum(0), segs_i({ 0 }), segs_o({ 0 }), c({ 0 }), logc({ 0 }), cavg({ 0 }),
-			linpoints({ 0 }), domain({ 0 }), range({ 0 }), pavg({ 0 }), normx({ 0 }), normy({ 0 }), size(1), sizeo(1), rng(gsl_rng_alloc(gsl_rng_taus2))
+			 size(1), sizeo(1), rng(gsl_rng_alloc(gsl_rng_taus2))
 		{seed(th);}
 		 
 		// Class destructor

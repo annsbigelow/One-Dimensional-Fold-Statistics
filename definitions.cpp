@@ -15,20 +15,14 @@ void folds_stats::segdens(int &numplaces) {
     // CHR: pavg, normx, and normy only exist within this function so you
     // declare them locally instead of as class members. In addition, you know
     // their size exactly, so this is a case where the extensibility
-    // of vectors isn't needed. You could do
-    //
-    // double *pavg=new double[numplaces];
-    // for(int i=0;i<numplaces) pavg[i]=0;
-    //
-    // Similar for the other cases.
-    pavg.clear();
-    normx.clear();
-    normy.clear();
-    for (int i = 0; i < numplaces; i++) {
-        pavg.push_back(0);
-        normx.push_back(0);
-        normy.push_back(0);
-    }
+    // of vectors isn't needed. 
+
+    double* pavg = new double[numplaces]; // allocates memory for numplaces doubles
+    double* normx = new double[numplaces];
+    double* normy = new double[numplaces];
+    double* range = new double[numplaces];
+    vector<double> domain;
+    for (int i = 0; i < numplaces; i++) { pavg[i] = 0; normx[i] = 0; normy[i] = 0; range[i] = 0; }
 
     for (int w = 0; w < instance; w++) {
         //cout << omp_get_thread_num() << '\n';
@@ -41,10 +35,6 @@ void folds_stats::segdens(int &numplaces) {
         lo = getmin(segs_o);
         hi = getmax(segs_o);
         domain = linspace(lo, hi, numplaces); // each step is 1/numplaces
-        range.clear();
-        for (int i = 0; i < numplaces; i++) {
-            range.push_back(0);
-        }
 
         // scan across final segment
         double fac=numplaces/(hi-lo);
@@ -57,21 +47,21 @@ void folds_stats::segdens(int &numplaces) {
             //
             // Another issue here is that you have to do a for-loop over all
             // bins. It can be done more efficiently than this.
-            for (int m = 0; m < numplaces; m++) {
+           /* for (int m = 0; m < numplaces; m++) {
                 if (segs_o[i] <= domain[m] && domain[m] <= segs_o[i + 1]) {
                     range[m] += 1;
                 }
-            }
+            }*/
 
-            // CHR: Here's a more efficient way to do it, without looping over all
-            // of the data. I'm also assuming that the segments might not have
-            if(false) {
-                int mlo=int((segs_o[i]-lo)*fac),mhi=int((segs_o[i+1]-lo)*fac);
-                if(mhi>mlo) {int o=mlo;mlo=mhi;mhi=o;}
-                if(mlo<0) mlo=0;else if(mlo>numplaces) mlo=numplaces;
-                if(mhi<0) mhi=0;else if(mhi>numplaces) mhi=numplaces;
-                for(int m=mlo;m<mhi;m++) range[m]+=1;
-            }
+            //// CHR: Here's a more efficient way to do it, without looping over all
+            //// of the data. I'm also assuming that the segments might not have
+            //if(false) {
+            //    int mlo=int((segs_o[i]-lo)*fac),mhi=int((segs_o[i+1]-lo)*fac);
+            //    if(mhi>mlo) {int o=mlo;mlo=mhi;mhi=o;}
+            //    if(mlo<0) mlo=0;else if(mlo>numplaces) mlo=numplaces;
+            //    if(mhi<0) mhi=0;else if(mhi>numplaces) mhi=numplaces;
+            //    for(int m=mlo;m<mhi;m++) range[m]+=1;
+            //}
 
             // CHR: Here's an even better way to do it. The previous approaches
             // only bin segments when they specific values (given by the
@@ -80,16 +70,16 @@ void folds_stats::segdens(int &numplaces) {
             // Currently they'd just be omitted. We could improve this by
             // binning them according to the fraction of the range between
             // domain[m] and domain[m+1] that they cover.
-            if(false) {
+           
                 double x=(segs_o[i]-lo)*fac,y=(segs_o[i+1]-lo)*fac,z;
                 if(x>y) {double z=x;x=y;y=z;}
                 int mlo=int(x),mhi=int(y);
                 if(mlo<0) mlo=0;else if(mlo>=numplaces) mlo=numplaces-1;
-                if(mhi<0) mhi=0;else if(mhi>=numplaces) mhi=numplaces-1;
+                if(mhi<0) mhi=0;else if(mhi>=numplaces) mhi=numplaces-1; // Ann: aren't mlo/mhi never less than 0? 
                 range[mlo]-=x-mlo;   // Account for first bin only being partially covered
                 for(int m=mlo;m<=mhi;m++) range[m]+=1;
                 range[mhi]-=mhi+1-y;  // Account for last bin only being partially covered
-            }
+            
         }
         for (int j = 0; j < numplaces; j++) {
             sum += range[j]; // the un-normalized integral
@@ -104,30 +94,28 @@ void folds_stats::segdens(int &numplaces) {
         sum = 0;
     }
 
-    /*char buf[128];
-    sprintf(buf,"NormSegDens_testomp%d.txt",th);
-    densData.open(buf);*/
-
-    densData.open("NormSegDens_omptest.txt");
+    densData.open("NormSegDens_40new.txt");
+    double h = 1.0 / (double)numplaces;
     for (int j = 0; j < numplaces; j++) {
         //domavg[j] /= instance;
         //
         // CHR: It's unclear to me why hi and lo enter in here. They will be set by
         // the final instance. I don't see why those final values would be relevant
         // for the outputting this data.
-        normx[j] = (domain[j] - lo) / (hi - lo); // normalize x-axis
+        //normx[j] = (domain[j] - lo) / (hi - lo); // normalize x-axis
         pavg[j] /= instance;
-        densData << normx[j] << ' ' << pavg[j] << '\n';
+       // densData << normx[j] << ' ' << pavg[j] << '\n';
 
         // CHR: For the third method, if you have spacing h=1/numplaces, each bin covers
         // [j*h,(j+1)*h]. So it would make sense to use an x coordinate halfway
         // between them, like
-        // densData << (j+0.5)*h << ' ' << pavg[j] << '\n';
+         densData << (j+0.5)*h << ' ' << pavg[j] << '\n';
     } 
     densData.close();
-
-    // CHR: With arrays, you'd need to add lines like this here:
-    // delete [] pavg;
+    delete[] pavg; // free memory for arrays
+    delete[] normx;
+    delete[] normy;
+    delete[] range;
 }
 
 void folds_stats:: log_fixedn(){
@@ -324,7 +312,7 @@ void folds_stats::display(vector<double> arr) {
 
 // Similar to numpy.linspace()
 vector<double> folds_stats:: linspace(const double &start, const double &end, int &num) {
-    linpoints.clear();
+    vector<double> linpoints;
     if (num == 0) return linpoints;
     if (num == 1) {
         linpoints.push_back(start);

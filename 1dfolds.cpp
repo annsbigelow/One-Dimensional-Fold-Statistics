@@ -13,7 +13,7 @@ int main() {
     {
         int s_divide = 200;
         //int th = omp_get_thread_num();
-        folds_stats fs(72); // if you want new sequence of random nums, change fs() input.
+        folds_stats fs(12); // if you want new sequence of random nums, change fs() input.
         fs.segdens(s_divide);
 
     }
