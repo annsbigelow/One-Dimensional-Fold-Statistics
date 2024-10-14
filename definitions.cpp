@@ -10,6 +10,58 @@ using namespace std;
 #include <gsl/gsl_rng.h>
 
 
+void folds_stats::altFold_segdens(int& numplaces){
+    
+    double* pavg = new double[numplaces]; 
+    double* normx = new double[numplaces];
+    double* normy = new double[numplaces];
+    double* range = new double[numplaces];
+    vector<double> domain;
+    for (int i = 0; i < numplaces; i++) { pavg[i] = 0; normx[i] = 0; normy[i] = 0; range[i] = 0; }
+
+    for (int w = 0; w < instance; w++) {
+        segs_o = altFold();
+        lo = getmin(segs_o);
+        hi = getmax(segs_o);
+        domain = linspace(lo, hi, numplaces); 
+
+        // scan across final segment
+        double fac = numplaces / (hi - lo);
+        for (int i = 0; i < segs_o.size(); i += 2) {
+
+            double x = (segs_o[i] - lo) * fac, y = (segs_o[i + 1] - lo) * fac, z;
+            if (x > y) { double z = x; x = y; y = z; }
+            int mlo = int(x), mhi = int(y);
+            if (mlo < 0) mlo = 0; else if (mlo >= numplaces) mlo = numplaces - 1;
+            if (mhi < 0) mhi = 0; else if (mhi >= numplaces) mhi = numplaces - 1; 
+            range[mlo] -= x - mlo;   // Account for first bin only being partially covered
+            for (int m = mlo; m <= mhi; m++) range[m] += 1;
+            range[mhi] -= mhi + 1 - y;  // Account for last bin only being partially covered
+        }
+        for (int j = 0; j < numplaces; j++) {
+            sum += range[j]; // the un-normalized integral
+        }
+        sum /= numplaces;
+        for (int i = 0; i < numplaces; i++) {
+            normy[i] = range[i] / sum; // normalize y-axis to integrate to 1.
+            pavg[i] += normy[i];
+        }
+        sum = 0;
+    }
+
+    densData.open("Altfold_segdens_n10.txt");
+    double h = 1.0 / (double)numplaces;
+    for (int j = 0; j < numplaces; j++) {
+        pavg[j] /= instance;
+        densData << (j + 0.5) * h << ' ' << pavg[j] << '\n';
+    }
+    densData.close();
+    delete[] pavg;
+    delete[] normx;
+    delete[] normy;
+    delete[] range;
+}
+
 void folds_stats::segdens(int &numplaces) {
 
     // CHR: pavg, normx, and normy only exist within this function so you
@@ -204,8 +256,98 @@ void folds_stats::logavg() {
     display(c); 
 }
 
+vector<double> folds_stats::altFold() {
+    vector<double> segs_out;
+    vector<double> segsin = { 0,1 };
+    vector<double> q; 
+    vector<double> qmap;
+    int* directvec = new int[n];
+
+    for (int k = 0; k < n; k++) {
+        q.push_back(gsl_rng_uniform(rng)); 
+        direct = rand()%2;
+        directvec[k] = direct; // Store the directions 
+
+        // Map q[k]
+        // q.size() is the number of folds that have already happened
+        qmap.push_back(q[k]);
+        for (int m = 0; m < q.size()-1; m++) {
+            if (directvec[m] == 0) { // right fold
+                if (qmap[q.size() - 1] < qmap[m]) { qmap[q.size() - 1] = 2 * qmap[m] - qmap[q.size() - 1]; }
+            }
+            else if (directvec[m] == 1) { // left fold
+                if (qmap[m] < qmap[q.size() - 1]) {qmap[q.size() - 1] = 2*qmap[m] - qmap[q.size() - 1]; }
+            }
+        }
+        LO = getmin(segsin);
+        HI = getmax(segsin);
+        x = qmap[k];
+        // check if x in outermost segment
+        if (LO < x && x < HI) {
+            // loop through each segment
+            size = segsin.size();
+            for (long i = 0; i < size; i += 2) {
+                // identify i'th segment
+                seg_l = segsin[i];
+                seg_r = segsin[i + 1];
+                // right fold
+                if (direct == 0) {
+                    if (seg_l < x && x < seg_r) {
+                        segs_out.push_back(x);
+                        segs_out.push_back((2 * x) - seg_l);
+                        segs_out.push_back(x);
+                        segs_out.push_back(seg_r);
+                    }
+                    else if (x > seg_r) {
+                        segs_out.push_back((2 * x) - seg_r);
+                        segs_out.push_back((2 * x) - seg_l);
+                    }
+                    else if (x <= seg_l) {
+                        segs_out.push_back(seg_l);
+                        segs_out.push_back(seg_r);
+                    }
+                    else if (x == seg_r) {
+                        segs_out.push_back(x);
+                        segs_out.push_back((2 * x) - seg_l);
+                    }
+                }
+                // left fold
+                else if (direct == 1) {
+                    if (seg_l < x && x < seg_r) {
+                        segs_out.push_back(seg_l);
+                        segs_out.push_back(x);
+                        segs_out.push_back((2 * x) - seg_r);
+                        segs_out.push_back(x);
+                    }
+                    else if (x < seg_l) {
+                        segs_out.push_back((2 * x) - seg_r);
+                        segs_out.push_back((2 * x) - seg_l);
+                    }
+                    else if (x >= seg_r) {
+                        segs_out.push_back(seg_l);
+                        segs_out.push_back(seg_r);
+                    }
+                    else if (x == seg_l) {
+                        segs_out.push_back((2 * x) - seg_r);
+                        segs_out.push_back(x);
+                    }
+                }
+            }
+        }
+        // else: don't fold at outermost endpoints. Then crease # does not change
+        else {
+            segs_out = segsin;
+        }
+
+        segsin = segs_out;
+    }
+    return segs_out;
+    delete[] directvec;
+}
+
 vector<double> folds_stats::fold(vector<double> &segs_in) {
-    vector<double> segs_out;  // Include in class construction ?? If you do, you get very large crease values
+    vector<double> segs_out;  
+    
     // 1 for fold direction left; 0 for right.
     direct = rand() % 2; // convert to GSL RNG?
    
@@ -230,7 +372,7 @@ vector<double> folds_stats::fold(vector<double> &segs_in) {
             // right fold
             if (direct == 0) {
                 if (seg_l < x && x < seg_r) {
-                    segs_out.push_back(x); // IS segs_out AN EMPTY VEC AT FIRST?
+                    segs_out.push_back(x); 
                     segs_out.push_back((2 * x) - seg_l);
                     segs_out.push_back(x);
                     segs_out.push_back(seg_r);

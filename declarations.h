@@ -16,12 +16,11 @@ class folds_stats {
 		long size, sizeo;
 		double LO, HI, seg_l, seg_r, x, min, max, step, lo, hi, sum;
 		vector<double> segs_i, segs_o, c, logc, cavg;
-		//vector < double> segs_out; // Initializing value?? 
 		vector<int> f;
 		// instance = number of iterations to take avg over
 		const int instance = 10000;
 		// n = number of folds 
-		const int n = 40;
+		const int n = 10;
 
 		// Class constructor 
 		// seeds rng upon class instance creation
@@ -38,9 +37,11 @@ class folds_stats {
 			gsl_rng_set(rng, k);
 		}
 
+		void altFold_segdens(int &numplaces);
 		void segdens(int &numplaces);
 		void log_fixedn();
 		void logavg();
+		vector<double> altFold();
 		vector<double> fold(vector<double> &segs_in);
 		double getmin(vector<double> &segs_in);
 		double getmax(vector<double> &segs_in);
