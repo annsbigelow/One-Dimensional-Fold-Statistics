@@ -41,7 +41,7 @@ function z = L(x,f,n,grd) % Lagrange polynomial interpolant for each integration
         j = j + space;
     end 
 
-    % Lines 41-43 yield Runge Phenom. (or choosing any more points than ~7)
+    % Lines 45-47 yield Runge Phenom. (or choosing any more points than ~7)
 %     k=n;
 %     Y=f;
 %     X=grd;
