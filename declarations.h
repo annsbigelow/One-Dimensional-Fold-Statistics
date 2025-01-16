@@ -36,7 +36,7 @@ class folds_stats {
             gsl_rng_free(rng);
         }
 
-        inline void seed(long int k) {
+        inline void seed(long int k) { 
             gsl_rng_set(rng, k);
         }
 

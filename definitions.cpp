@@ -262,7 +262,7 @@ vector<double> folds_stats::altFold(string txt) {
             else {segs_out = segsin;}
             //// CODE BELOW only collects stats for crease exponent. COMMENT OUT if collecting SEGMENT DENSITY data
             long sizeo = segs_out.size();
-            // Number of creases is number of segments - 1
+            // Number of creases is number of segments - 1 
             c[k] = (sizeo / 2) - 1;
 \
             // Avoid the case when no fold happened the first time. Then log(0) = -inf

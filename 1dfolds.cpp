@@ -18,7 +18,7 @@ int main() {
         folds_stats fs(seed,inst,n); // if you want new sequence of random nums, change fs() seed input.
 
     //fs.segdens(s_divide,"SegDens_5new.txt");
-        double t0 = omp_get_wtime();
+        double t0 = omp_get_wtime(); 
         fs.altFold(filename);
         printf("Total time elapsed is %g s\n", omp_get_wtime() - t0);
 
