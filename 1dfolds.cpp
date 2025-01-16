@@ -2,24 +2,25 @@
 using namespace std;
 #include "declarations.h"
 #include <omp.h>
-#include <gsl/gsl_rng.h>
 
 int main() {
-    double t0 = omp_get_wtime();
+    // User input
+    int seed, inst, n;
+    string filename;
+    std::cout << "Type any number to seed the RNG:";
+    std::cin >> seed;
+    std::cout << "Type the number of instances for averaging:";
+    std::cin >> inst;
+    std::cout << "Type the number of folds:";
+    std::cin >> n;
+    std::cout << "Type the filename to write data to:";
+    std::cin >> filename;
+        folds_stats fs(seed,inst,n); // if you want new sequence of random nums, change fs() seed input.
 
-  //  omp_set_num_threads(4);
-//#pragma omp parallel
-    //{
-        int s_divide = 256;
-    //    //int th = omp_get_thread_num();
-        folds_stats fs(15); // if you want new sequence of random nums, change fs() input.
-    //    fs.segdens(s_divide);
-
-   // }
-    fs.segdens(s_divide);
-//        fs.altFold_segdens(s_divide);
-
-    printf("Time elapsed is %g s\n", omp_get_wtime() - t0);
+    //fs.segdens(s_divide,"SegDens_5new.txt");
+        double t0 = omp_get_wtime();
+        fs.altFold(filename);
+        printf("Total time elapsed is %g s\n", omp_get_wtime() - t0);
 
     return 0;
 }
