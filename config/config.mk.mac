@@ -18,5 +18,9 @@ fftw_lflags=-L/opt/local/lib -lfftw3
 gsl_iflags=`gsl-config --cflags`
 gsl_lflags=`gsl-config --libs`
 
+# Flags for Voro++
+voropp_iflags=-I/usr/local/include/voro++
+voropp_lflags=-L/usr/local/lib -lvoro++
+
 # LAPACK flags for linear algebra
 lp_lflags=-framework Accelerate
