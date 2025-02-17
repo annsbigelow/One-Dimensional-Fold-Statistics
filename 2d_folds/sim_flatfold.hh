@@ -20,8 +20,10 @@ class sim_flatfold {
 		sim_flatfold();
 		sim_flatfold(double ax,double bx,double ay,double by);
 		~sim_flatfold();
+		void random_flatfold1(bool rand_sign=false);
 		bool random_flatfold(bool rand_sign=false);
 		void random_radial_fold(bool rand_sign=false);
+		void random_fold1(bool rand_sign=false);
 		void random_fold(double frac,bool rand_sign=false);
 		bool flatfold(double nx,double ny,double di,int fsign=1);
 		void radial_fold(double x,double y,double ro,double al,double be,int fsign=1);
@@ -60,6 +62,12 @@ class sim_flatfold {
 			return gsl_rng_get(rng)&1?-1:1;
 		}
 		void update_bounding_circle(facet *f);
+		/** The x-coordinate of a random point in the bounding circle.
+		 */
+		double px;
+		/** The y-coordinate of a random point in the bounding circle.
+		*/
+		double py;
 		/** The x-coordinate of the approximate center of the folded
 		 * sheet. */
 		double cx;

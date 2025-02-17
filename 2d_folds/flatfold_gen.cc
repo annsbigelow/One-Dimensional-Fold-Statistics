@@ -6,9 +6,10 @@
 int main(int argc,char **argv) {
 
 	// Check for the correct number of command-line arguments
-	if(argc<2||argc>5) {
-		fputs("Syntax: ./flatfold_gen <num_folds> [<seed>] [<percent_radial>] [<sign>]\n\n"
-		      "sign=0 for positive folds, sign=1 for folds with random sign\n",stderr);
+	if(argc<2||argc>6) {
+		fputs("Syntax: ./flatfold_gen <num_folds> [<seed>] [<percent_radial>] [<sign>] [<fold_option>]\n\n"
+		      "sign=0 for positive folds, sign=1 for folds with random sign\n"
+			"fold_option=0 for standard random fold, fold_option=1 for an updated protocol\n",stderr);
 		return 1;
 	}
 
@@ -23,6 +24,7 @@ int main(int argc,char **argv) {
 	unsigned long seed=1;
 	double frac=0.;
 	bool rand_sign=false;
+	int fold_option=1;
 	if(argc>2) {
 
 		// Read the random seed
@@ -35,7 +37,12 @@ int main(int argc,char **argv) {
 			else if(frac>1) frac=1;
 
 			// Read whether to use random signs on the folds
-			if(argc>4) rand_sign=atoi(argv[4])==1;
+			if(argc>4) {
+				rand_sign=atoi(argv[4])==1;
+				
+				// Read the random fold protocol choice
+				if(argc>5) fold_option=atoi(argv[5]);
+			}
 		}
 	}
 
@@ -44,7 +51,8 @@ int main(int argc,char **argv) {
 	sim_flatfold ff;
 	ff.seed(seed);
 	while(i<folds) {
-		ff.random_fold(frac,rand_sign);
+		if(fold_option==0) ff.random_fold(frac,rand_sign);
+		else if(fold_option==1) ff.random_fold1(rand_sign);
 		if(++i%3==0) ff.compute_bounds();
 	}
 
