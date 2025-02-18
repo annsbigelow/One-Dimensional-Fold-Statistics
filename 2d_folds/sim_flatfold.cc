@@ -1,5 +1,5 @@
 #include "sim_flatfold.hh"
-
+#include <cstdio>
 #include <cmath>
 
 //const double M_PI=3.1415926535897932384626433832795;
@@ -51,14 +51,14 @@ void sim_flatfold::compute_bounds() {
 * (px,py).
 * \param[in] rand_sign whether to choose a random sign for the fold or not.
 */
-void sim_flatfold::random_flatfold1(bool rand_sign) {
+bool sim_flatfold::random_flatfold1(bool rand_sign) {
 	double th=2*M_PI*gsl_rng_uniform(rng);
 	double nx=-sin(th);
 	double ny=cos(th);
 	if (ny<0) {nx=-nx; ny=-ny;}
-	double di=(py-px*tan(th))/sqrt(1+(tan(th))^2);
+	double di=(py-px*tan(th))/sqrt(1+(tan(th)*tan(th)));
 
-	flatfold(nx,ny,di,rand_sign?random_sign():1);
+	return flatfold(nx,ny,di,rand_sign?random_sign():1);
 }
 
 /** Applies a random flat fold to the sheet, choosing a random angle and
@@ -200,8 +200,9 @@ void sim_flatfold::radial_fold(double x,double y,double ro,double al,double be,i
 }
 
 /** Chooses a random point, checks that it is on the sheet, and applies a fold.
- * \param[in] rand_sign whether to choose a random sign for the fold or not. */
-void sim_flatfold::random_fold1(bool rand_sign) {
+* The option for radial folds has not yet been added.
+* \param[in] rand_sign whether to choose a random sign for the fold or not. */
+bool sim_flatfold::random_fold1(bool rand_sign) {
 	for (int k = 0; k < sim_flatfold_max_attempts; k++) {
 		double th_p=2*M_PI*gsl_rng_uniform(rng);
 		double r_p=cr*gsl_rng_uniform(rng);
@@ -210,11 +211,14 @@ void sim_flatfold::random_fold1(bool rand_sign) {
 
 		if (point_inside(px,py)) break;
 		if (k==sim_flatfold_max_attempts-1) {
+			// These next two lines are only here for debugging.
+			std::printf("px: %g, py: %g, cr: %g, cx: %g, cy: %g \n", px,py,cr,cx,cy);
+			output("ff_err.dat");
 			fputs("Too many flatfold attempts in random_fold1\n", stderr);
 			exit(1);
 		}
 	}
-	random_flatfold1(rand_sign);	
+	return random_flatfold1(rand_sign);
 }
 
 
