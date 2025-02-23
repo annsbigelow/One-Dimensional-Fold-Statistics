@@ -56,7 +56,7 @@ bool sim_flatfold::random_flatfold1(bool rand_sign) {
 	double nx=-sin(th);
 	double ny=cos(th);
 	if (ny<0) {nx=-nx; ny=-ny;}
-	double di=(py-px*tan(th))/sqrt(1+(tan(th)*tan(th)));
+	double di=px*nx+py*ny;
 
 	return flatfold(nx,ny,di,rand_sign?random_sign():1);
 }
@@ -205,7 +205,7 @@ void sim_flatfold::radial_fold(double x,double y,double ro,double al,double be,i
 bool sim_flatfold::random_fold1(bool rand_sign) {
 	for (int k = 0; k < sim_flatfold_max_attempts; k++) {
 		double th_p=2*M_PI*gsl_rng_uniform(rng);
-		double r_p=cr*gsl_rng_uniform(rng);
+		double r_p=sqrt(cr*gsl_rng_uniform(rng));
 		px=r_p*cos(th_p);
 		py=r_p*sin(th_p);
 
