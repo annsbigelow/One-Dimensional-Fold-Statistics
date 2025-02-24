@@ -23,7 +23,7 @@ class sim_flatfold {
 		bool random_flatfold1(bool rand_sign=false);
 		bool random_flatfold(bool rand_sign=false);
 		void random_radial_fold(bool rand_sign=false);
-		bool random_fold1(bool rand_sign=false);
+		void random_fold1(bool rand_sign=false);
 		void random_fold(double frac,bool rand_sign=false);
 		bool flatfold(double nx,double ny,double di,int fsign=1);
 		void radial_fold(double x,double y,double ro,double al,double be,int fsign=1);
