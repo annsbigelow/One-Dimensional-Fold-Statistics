@@ -1,5 +1,5 @@
 #include "sim_flatfold.hh"
-#include <cstdio>
+
 #include <cmath>
 
 //const double M_PI=3.1415926535897932384626433832795;
@@ -67,7 +67,7 @@ bool sim_flatfold::random_flatfold1(bool rand_sign) {
 void sim_flatfold::random_fold1(bool rand_sign) {
 	for (int k = 0; k < sim_flatfold_max_attempts; k++) {
 		double th_p = 2 * M_PI * gsl_rng_uniform(rng);
-		double r_p = sqrt(cr * gsl_rng_uniform(rng));
+		double r_p = cr*sqrt(gsl_rng_uniform(rng));
 		px = r_p * cos(th_p);
 		py = r_p * sin(th_p);
 		if (random_flatfold1(rand_sign)) return;
