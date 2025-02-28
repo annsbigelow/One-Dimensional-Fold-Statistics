@@ -53,7 +53,9 @@ int main(int argc,char **argv) {
 	while(i<folds) {
 		if(fold_option) ff.random_fold1(rand_sign);
 		else ff.random_fold(frac, rand_sign);
-		if(++i%2==0) ff.compute_bounds();
+		ff.compute_bounds();
+		++i;
+		printf("fold: %d\n",i);
 	}
 
 	// Output positive and negative creases, plus the shape of the folded
