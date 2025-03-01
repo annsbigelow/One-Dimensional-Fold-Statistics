@@ -37,7 +37,7 @@ int main(int argc,char **argv) {
 			// Perform random folds, according to the chosen random fold protocol,
 			// and store the number of facets after each
 			if(fold_option){
-				for (int i=0;i<max_fold-1;) if (ff.random_flatfold1()) {
+				for (int i=0;i<max_fold-1;) if (ff.random_fold1()) {
 					if (++i%3==0) ff.compute_bounds();
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
