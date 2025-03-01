@@ -71,7 +71,7 @@ int main(int argc,char **argv) {
 
 	// Output the mean and standard deviation of the number of facets
 	char buf[256];
-	sprintf(buf,"ff_scale_%d.dat",seed);
+	sprintf(buf,"ff1_scale_%d.dat",seed);
 	FILE *fp=fopen(buf,"wb");
 	if(fp==NULL) {
 		fputs("Can't open output file\n",stderr);

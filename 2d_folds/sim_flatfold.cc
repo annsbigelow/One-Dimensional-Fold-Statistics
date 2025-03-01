@@ -1,5 +1,5 @@
 #include "sim_flatfold.hh"
-
+#include <cstdlib>
 #include <cmath>
 
 //const double M_PI=3.1415926535897932384626433832795;
@@ -65,14 +65,21 @@ bool sim_flatfold::random_flatfold1(bool rand_sign) {
 * The option for radial folds has not yet been added.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 bool sim_flatfold::random_fold1(bool rand_sign) {
-	for (int k = 0; k < sim_flatfold_max_attempts; k++) {
+	double pxs[sim_flatfold_max_attempts],pys[sim_flatfold_max_attempts]; //for debugging
+	for (int k=0; k < sim_flatfold_max_attempts; k++) {
 		double th_p = 2 * M_PI * gsl_rng_uniform(rng);
 		double r_p = cr*sqrt(gsl_rng_uniform(rng));
 		px = r_p * cos(th_p) + cx;
 		py = r_p * sin(th_p) + cy;
+		pxs[k]=px;
+		pys[k]=py; // for debugging
 		if (point_inside(px, py)) break;
 		if (k == sim_flatfold_max_attempts - 1) {
+			output("ff_err.dat");
 			fputs("Too many attempts to find a point in the sheet in random_fold1\n", stderr);
+			FILE *fp=fopen("err_pts.txt","w");
+			for(int i=0;i<k;i++)fprintf(fp,"%g\t%g\n",pxs[i],pys[i]);
+			fclose(fp);
 			exit(1);
 		}
 	}
