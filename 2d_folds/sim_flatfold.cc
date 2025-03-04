@@ -45,6 +45,9 @@ void sim_flatfold::compute_bounds() {
 	for(unsigned int i=0;i<f.size();i++)
 		if((rsq=f[i]->max_rad_sq(cx,cy))>crsq) crsq=rsq;
 	cr=sqrt(crsq);
+	
+	//for debugging
+	printf("cr: %g\n",cr);
 }
 
 /** Applies a random flat fold to the sheet according to a random angle and 

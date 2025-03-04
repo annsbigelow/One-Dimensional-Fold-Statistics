@@ -51,9 +51,8 @@ int main(int argc,char **argv) {
 	sim_flatfold ff;
 	ff.seed(seed);
 	while(i<folds) {
-		if(fold_option) ff.random_fold1(rand_sign);
-		else ff.random_fold(frac, rand_sign);
-		if(++i%2==0)ff.compute_bounds();
+		if(fold_option) {ff.random_fold1(rand_sign); ff.compute_bounds(); ++i;}
+		else {ff.random_fold(frac, rand_sign); if(++i%3==0)ff.compute_bounds();}
 		printf("fold: %d\n",i);
 	}
 
