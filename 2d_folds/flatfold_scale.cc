@@ -11,7 +11,7 @@ int main(int argc,char **argv) {
 	// Obtain seed
 	if(argc!=3) {
 		fputs("Syntax: ./flatfold_scale <seed> <fold_option>\n"
-			"fold_option=0 for standard random fold, fold_option=1 for an updated protocol\n",stderr);
+			"fold_option=0 for standard random fold, fold_option=1 to choose a random point then angle, fold_option=2 to choose two edge points\n",stderr);
 		return 1;
 	}
 	int seed=atoi(argv[1]);
@@ -36,19 +36,27 @@ int main(int argc,char **argv) {
 
 			// Perform random folds, according to the chosen random fold protocol,
 			// and store the number of facets after each
-			if(fold_option){
-				for (int i=0;i<max_fold-1;) if (ff.random_fold1()) {
-					if (++i%3==0) ff.compute_bounds();
+			if(fold_option==1){
+				for (int i=0;i<max_fold-1;) 
+					ff.random_fold1();
+					ff.compute_bounds();
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
-				}
+					++i;
 			}
-			else{
+			else if (fold_option==0){
 				for(int i=0;i<max_fold-1;) if(ff.random_flatfold()) {
 					if(++i%3==0) ff.compute_bounds();
 					fo[i]=ff.f.size();
 					ff.crease_mileage(pos[i],neg[i]);
 				}
+			}
+			else if (fold_option==2){
+				for (int i=0; i<max_fold-1;) 
+					ff.random_fold2();
+					if (++i%3==0) ff.compute_bounds();
+					fo[i] = ff.f.size();
+					ff.crease_mileage(pos[i], neg[i]);
 			}
 
 #pragma omp critical
@@ -71,7 +79,7 @@ int main(int argc,char **argv) {
 
 	// Output the mean and standard deviation of the number of facets
 	char buf[256];
-	sprintf(buf,"ff1_scale_%d.dat",seed);
+	sprintf(buf,"ff%d_scale_%d.dat",fold_option,seed);
 	FILE *fp=fopen(buf,"wb");
 	if(fp==NULL) {
 		fputs("Can't open output file\n",stderr);
