@@ -48,7 +48,7 @@ void sim_flatfold::compute_bounds() {
 }
 
 /** Finds a random point on a random edge of a random facet.
-* \return The [x,y] coordinates of the point. */
+*/
 void sim_flatfold::find_ed_pts(double &epx,double &epy){
 	// Choose a random facet 
 	unsigned int idx = gsl_rng_uniform_int(rng,f.size());
