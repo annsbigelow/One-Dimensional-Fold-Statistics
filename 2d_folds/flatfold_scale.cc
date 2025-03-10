@@ -37,12 +37,13 @@ int main(int argc,char **argv) {
 			// Perform random folds, according to the chosen random fold protocol,
 			// and store the number of facets after each
 			if(fold_option==1){
-				for (int i=0;i<max_fold-1;) 
+				for (int i=0;i<max_fold-1;){ 
 					ff.random_fold1();
 					ff.compute_bounds();
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 					++i;
+				}
 			}
 			else if (fold_option==0){
 				for(int i=0;i<max_fold-1;) if(ff.random_flatfold()) {
@@ -52,11 +53,12 @@ int main(int argc,char **argv) {
 				}
 			}
 			else if (fold_option==2){
-				for (int i=0; i<max_fold-1;) 
+				for (int i=0; i<max_fold-1;){ 
 					ff.random_fold2();
 					if (++i%3==0) ff.compute_bounds();
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
+				}
 			}
 
 #pragma omp critical
