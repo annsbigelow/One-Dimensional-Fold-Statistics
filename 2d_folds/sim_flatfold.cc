@@ -86,8 +86,12 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 				exit(1);
 			}
 			j++;
+
 		} while (point_inside(p2x,p2y));
-		if (random_flatfold2(rand_sign)) return;
+		if (random_flatfold2(rand_sign)) {
+		//	for (int l=0;l<f.size();l++) {printf("area of facet %d: %g\n",l,f[l]->c.area());}
+			return;
+		}
 	}
 	fputs("Too many flatfold attempts in random_fold2\n", stderr);
 	exit(1);
@@ -97,10 +101,10 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 * \param[in] rand_sign whether to choose a random sign for the fold or not.
 * \return Whether the fold intersected the sheet or not.*/
 bool sim_flatfold::random_flatfold2(bool rand_sign) {
-	double nx = p1y-p2y;
-	double ny = p2x-p1x;
-	double magn=sqrt((p1y-p2y)*(p1y-p2y) + (p2x-p1x)*(p2x-p1x));
-	double di = (p2x*p1y-p1x*p2y)/magn;
+	double magn=1/sqrt((p1y-p2y)*(p1y-p2y) + (p2x-p1x)*(p2x-p1x));
+	double nx = magn*(p1y-p2y);
+	double ny = magn*(p2x-p1x);
+	double di = p2x*nx+p2y*ny;
 	return flatfold(nx,ny,di,rand_sign?random_sign():1);
 }
 
