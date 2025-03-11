@@ -52,14 +52,16 @@ void sim_flatfold::compute_bounds() {
 void sim_flatfold::find_ed_pts(double &epx,double &epy){
 	// Choose a random facet 
 	unsigned int idx = gsl_rng_uniform_int(rng,f.size());
-	facet* rf = f[idx];
 
 	// Choose a random edge
-	int edges = rf->c.current_vertices;
+	//int edges = f[idx]->c.current_vertices;
+	int l=0;
+	int edges=0;
+	do {l=f[idx]->c.ed[2*l]; edges++;} while (l!=0);
 	int k=gsl_rng_uniform_int(rng,edges);
-	double v1x=rf->c.pts[2*k], v1y=rf->c.pts[2*k+1];
-	k=rf->c.ed[2*k];
-	double v2x=rf->c.pts[2*k], v2y=rf->c.pts[2*k+1];
+	double v1x=f[idx]->c.pts[2*k], v1y=f[idx]->c.pts[2*k+1];
+	k=f[idx]->c.ed[2*k];
+	double v2x=f[idx]->c.pts[2*k], v2y=f[idx]->c.pts[2*k+1];
 
 	epx = v1x+(v2x-v1x)*gsl_rng_uniform(rng); epy = v1y+(v2y-v1y)*gsl_rng_uniform(rng);
 }
@@ -89,7 +91,7 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 
 		} while (point_inside(p2x,p2y));
 		if (random_flatfold2(rand_sign)) {
-		//	for (int l=0;l<f.size();l++) {printf("area of facet %d: %g\n",l,f[l]->c.area());}
+//			for (int l=0;l<f.size();l++) {printf("area of facet %d: %g\n",l,f[l]->c.area());}
 			return;
 		}
 	}
