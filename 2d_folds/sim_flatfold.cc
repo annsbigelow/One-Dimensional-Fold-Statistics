@@ -8,7 +8,7 @@
 sim_flatfold::sim_flatfold() : rng(gsl_rng_alloc(gsl_rng_taus)) {
 	f.push_back(new facet(-1,1,-1,1));
 	cx=0;cy=0;crsq=2.;cr=sqrt(2.);
-	v={-1.,1., 1.,1., 1.,-1., -1.,-1.};
+//	v={-1.,1., 1.,1., 1.,-1., -1.,-1.};
 }
 
 /** Initializes the flatfold class to be a rectangular sheet.
@@ -52,11 +52,13 @@ void sim_flatfold::compute_bounds() {
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold2(bool rand_sign) {
 	double t_area=0, cumulative=0;
-	for (int k=0; k<f.size(); k++) {t_area+=f[k]->c.area();}
+	facet *rf;
+	for (unsigned int k=0; k<f.size(); k++) {t_area+=f[k]->c.area();}
 	double x=t_area*gsl_rng_uniform(rng);
-	for (int k=0; k<f.size(); k++) {
+	for (unsigned int k=0; k<f.size(); k++) {
 		cumulative+=f[k]->c.area();
-		if (x<=cumulative) {facet *rf=f[k]; break;}
+		if (x<=cumulative) {rf=f[k]; break;}
+		if (k==f.size()-1) {printf("Error: unable to choose random facet\n");}
 	}
 
 	double rr=rf->c.max_radius_squared(); rr=sqrt(rr);
@@ -344,7 +346,7 @@ void sim_flatfold::random_fold5(bool rand_sign) {
 			j++;
 
 		} while (point_inside(p2x, p2y));
-		if (random_flatfold2(rand_sign)) {
+		if (random_flatfold5(rand_sign)) {
 			//	for (int l=0;l<f.size();l++) {printf("area of facet %d: %g\n",l,f[l]->c.area());}
 			return;
 		}
