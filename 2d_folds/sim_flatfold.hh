@@ -20,11 +20,12 @@ class sim_flatfold {
 		sim_flatfold();
 		sim_flatfold(double ax,double bx,double ay,double by);
 		~sim_flatfold();
-		bool random_flatfold2(bool rand_sign=false);
-		void random_flatfold1(bool rand_sign=false);
+		bool random_flatfold5(bool rand_sign=false);
+		void random_flatfold_point(bool rand_sign=false);
 		bool random_flatfold(bool rand_sign=false);
 		void random_radial_fold(bool rand_sign=false);
-		void random_fold2(bool rand_sign = false);
+		void random_fold5(bool rand_sign = false);
+		void random_fold2(bool rand_sign=false);
 		void random_fold1(bool rand_sign=false);
 		void random_fold(double frac,bool rand_sign=false);
 		bool flatfold(double nx,double ny,double di,int fsign=1);
@@ -65,6 +66,9 @@ class sim_flatfold {
 			return gsl_rng_get(rng)&1?-1:1;
 		}
 		void update_bounding_circle(facet *f);
+		/** A vector holding the coordinates of the sheet's vertices. 
+		*/
+		std::vector<double> v;
 		/** The x-coordinate of a first random point along the 
 		* edge of the sheet. */
 		double p1x;

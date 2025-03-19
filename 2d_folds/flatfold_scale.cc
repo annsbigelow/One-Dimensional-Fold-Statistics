@@ -11,7 +11,7 @@ int main(int argc,char **argv) {
 	// Obtain seed
 	if(argc!=3) {
 		fputs("Syntax: ./flatfold_scale <seed> <fold_option>\n"
-			"fold_option=0 for standard random fold, fold_option=1 to choose a random point then angle, fold_option=2 to choose two edge points\n",stderr);
+			"fold_option=0 for standard random fold, fold_option=1 to choose a random point then angle, fold_option=2 to choose a random point uniformly on [-1,1]^2\n",stderr);
 		return 1;
 	}
 	int seed=atoi(argv[1]);
