@@ -308,7 +308,9 @@ void sim_flatfold::find_ed_pts(double& epx, double& epy) {
 	facet* rf = f[idx];
 
 	// Choose a random edge
-	int edges = rf->c.current_vertices;
+	int l = 0;
+	int edges = 0;
+	do { l = rf->c.ed[2 * l]; edges++; } while (l != 0);
 	int k = gsl_rng_uniform_int(rng, edges);
 	double v1x = rf->c.pts[2 * k], v1y = rf->c.pts[2 * k + 1];
 	k = rf->c.ed[2 * k];
