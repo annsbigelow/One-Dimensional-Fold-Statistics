@@ -64,7 +64,9 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 		else {cumulative += f[k]->c.area();}
 		if (x<=cumulative) {rf=f[k]; break;}
 		if (k==f.size()-1) {for (unsigned int k=0; k<f.size(); k++) {printf("Area of facet %d = %g\n",k,f[k]->c.area());}
-printf("Error: unable to choose random facet. x=%g, cumulative=%g\n",x,cumulative);output("fferr.dat");}
+printf("x=%g, cumulative=%g\n",x,cumulative);output("fferr.dat");
+fputs("Error: unable to choose a random facet.\n", stderr); exit(1);	
+		}
 	}
 
 	double rr=rf->c.max_radius_squared(); rr=sqrt(rr);
