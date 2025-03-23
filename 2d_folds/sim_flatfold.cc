@@ -53,10 +53,15 @@ void sim_flatfold::compute_bounds() {
 void sim_flatfold::random_fold2(bool rand_sign) {
 	double t_area=0, cumulative=0;
 	facet *rf;
-	for (unsigned int k=0; k<f.size(); k++) {t_area+=f[k]->c.area();}
+	// Compute the total area of each facet
+	for (unsigned int k=0; k<f.size(); k++) {
+		if (f[k]->flipped) {t_area-=f[k]->c.area();} 
+		else {t_area+=f[k]->c.area();}
+	}
 	double x=t_area*gsl_rng_uniform(rng);
 	for (unsigned int k=0; k<f.size(); k++) {
-		cumulative+=f[k]->c.area();
+		if (f[k]->flipped) {cumulative -= f[k]->c.area();}
+		else {cumulative += f[k]->c.area();}
 		if (x<=cumulative) {rf=f[k]; break;}
 		if (k==f.size()-1) {for (unsigned int k=0; k<f.size(); k++) {printf("Area of facet %d = %g\n",k,f[k]->c.area());}
 printf("Error: unable to choose random facet. x=%g, cumulative=%g\n",x,cumulative);output("fferr.dat");}
