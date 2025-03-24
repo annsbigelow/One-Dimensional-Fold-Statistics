@@ -48,6 +48,34 @@ void sim_flatfold::compute_bounds() {
 	cr=sqrt(crsq);
 }
 
+/** Chooses a random angle, then scans the sheet for a point and applies a fold.
+* \param[in] rand_sign whether to choose a random sign for the fold or not. */
+void sim_flatfold::random_fold3(bool rand_sign) {
+	double th = 2*M_PI*gsl_rng_uniform(rng);
+	double nx = cos(th);
+	double ny = sin(th);
+	// Find extremal vertices with respect to the normal vector 
+	// Initializing values may need to be adjusted
+	double min=10.0, max=-10.0;
+	double x,y;
+	for (unsigned int i=0; i<f.size(); i++) {
+		int k=0;
+		do {
+			x=f[i]->c.pts[2*k]; y=f[i]->c.pts[2*k+1];
+			if (x*nx+y*ny<=min) min=x*nx+y*ny;
+			else if (x*nx+y*ny>=max) max=x*nx+y*ny;
+			k = f[i]->c.ed[2*k];
+		} while (k != 0);
+	}
+
+	for (int k=0; k<10; k++) {
+		double di = min + (max - min) * gsl_rng_uniform(rng);
+		if (flatfold(nx, ny, di, rand_sign?random_sign():1)) return;
+	}
+	fputs("Too many flatfold attempts in random_fold3\n", stderr);
+	exit(1);
+}
+
 /** Chooses a random point in a facet weighted via area and applies a fold there.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold2(bool rand_sign) {
