@@ -81,23 +81,28 @@ void sim_flatfold::random_fold3(bool rand_sign) {
 /** Chooses a random point in a facet weighted via area and applies a fold there.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold2(bool rand_sign) {
-	double t_area=0, cumulative=0;
-	facet *rf;
+	double t_area=0.0, cumulative=0.0;
+	facet *rf = new facet(*f[0]);
 	// Compute the total area of each facet
 	for (unsigned int k=0; k<f.size(); k++) {
-		if (f[k]->flipped) {t_area-=f[k]->c.area();} 
-		else {t_area+=f[k]->c.area();}
+		if (f[k]->flipped) t_area-=f[k]->c.area();
+		else t_area+=f[k]->c.area();
 	}
 	double x=t_area*gsl_rng_uniform(rng);
 	for (unsigned int k=0; k<f.size(); k++) {
-		if (f[k]->flipped) {cumulative -= f[k]->c.area();}
-		else {cumulative += f[k]->c.area();}
-		if (x<=cumulative) {rf=f[k]; break;}
-		if (k==f.size()-1) {
-			fputs("Error: unable to choose a random facet.\n", stderr); 
-			exit(1);
+		if (f[k]->flipped) cumulative -= f[k]->c.area();
+		else cumulative += f[k]->c.area();
+		if (x<=cumulative) {
+			delete rf;
+			rf = new facet(*f[k]);
+			break;
 		}
 	}
+	if (!rf) {
+		fputs("Error: unable to choose a random facet.\n", stderr); 
+		exit(1);
+	}
+
 
 	double rx,ry;
 	rf->c.centroid(rx,ry);
@@ -109,13 +114,15 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 		double r_p = rr * sqrt(gsl_rng_uniform(rng));
 		px = r_p * cos(th_p) + rx;
 		py = r_p * sin(th_p) + ry;
-		if (rf->point_inside(px, py)) break;
-		if (k == sim_flatfold_max_attempts-1) {
-			fputs("Too many attempts to find a point in the facet in random_fold2\n", stderr);
-			exit(1);
+		if (rf->point_inside(px, py)) {
+			delete rf;
+			random_flatfold_point(rand_sign);
+			return;
 		}
 	}
-	random_flatfold_point(rand_sign);
+	fputs("Too many attempts to find a point in the facet in random_fold2\n", stderr);
+	delete rf;
+	exit(1);
 }
 
 
