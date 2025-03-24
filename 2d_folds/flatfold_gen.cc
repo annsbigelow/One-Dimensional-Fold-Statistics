@@ -9,8 +9,8 @@ int main(int argc,char **argv) {
 	if(argc<2||argc>6) {
 		fputs("Syntax: ./flatfold_gen <num_folds> [<seed>] [<percent_radial>] [<sign>] [<fold_option>]\n\n"
 		      "sign=0 for positive folds, sign=1 for folds with random sign\n"
-			"fold_option=0 for standard random fold; 1 to choose a random point then angle; 
-			2 to choose a random point uniformly on [-1,1]^2; 3 to choose a random angle then point\n",stderr);
+			"fold_option=0 for standard random fold; 1 to choose a random point then angle; " 
+			"2 to choose a random point uniformly on [-1,1]^2; 3 to choose a random angle then point\n",stderr);
 		return 1;
 	}
 

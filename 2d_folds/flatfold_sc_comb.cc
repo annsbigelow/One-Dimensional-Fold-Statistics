@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cmath>
 
-const int max_fold=40;
+const int max_fold=30;
 
 int main(int argc,char **argv) {
 

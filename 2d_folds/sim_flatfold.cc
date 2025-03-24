@@ -48,7 +48,8 @@ void sim_flatfold::compute_bounds() {
 	cr=sqrt(crsq);
 }
 
-/** Chooses a random angle, then scans the sheet for a point and applies a fold.
+/** Applies a fold to the sheet by choosing a random angle first, followed by 
+* a random displacement.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold3(bool rand_sign) {
 	double th = 2*M_PI*gsl_rng_uniform(rng);
@@ -56,20 +57,21 @@ void sim_flatfold::random_fold3(bool rand_sign) {
 	double ny = sin(th);
 	// Find extremal vertices with respect to the normal vector 
 	// Initializing values may need to be adjusted
-	double min=10.0, max=-10.0;
-	double x,y;
+	double min=10., max=-10.;
+	double x,y,d;
 	for (unsigned int i=0; i<f.size(); i++) {
 		int k=0;
 		do {
 			x=f[i]->c.pts[2*k]; y=f[i]->c.pts[2*k+1];
-			if (x*nx+y*ny<=min) min=x*nx+y*ny;
-			else if (x*nx+y*ny>=max) max=x*nx+y*ny;
+			d=x*nx+y*ny;
+			if (d<=min) min=d;
+			else if (d>=max) max=d;
 			k = f[i]->c.ed[2*k];
-		} while (k != 0);
+		} while (k!=0);
 	}
 
 	for (int k=0; k<10; k++) {
-		double di = min + (max - min) * gsl_rng_uniform(rng);
+		double di = min+(max-min)*gsl_rng_uniform(rng);
 		if (flatfold(nx, ny, di, rand_sign?random_sign():1)) return;
 	}
 	fputs("Too many flatfold attempts in random_fold3\n", stderr);
@@ -91,22 +93,24 @@ void sim_flatfold::random_fold2(bool rand_sign) {
 		if (f[k]->flipped) {cumulative -= f[k]->c.area();}
 		else {cumulative += f[k]->c.area();}
 		if (x<=cumulative) {rf=f[k]; break;}
-		if (k==f.size()-1) {for (unsigned int k=0; k<f.size(); k++) {printf("Area of facet %d = %g\n",k,f[k]->c.area());}
-printf("x=%g, cumulative=%g\n",x,cumulative);output("fferr.dat");
-fputs("Error: unable to choose a random facet.\n", stderr); exit(1);	
+		if (k==f.size()-1) {
+			fputs("Error: unable to choose a random facet.\n", stderr); 
+			exit(1);
 		}
 	}
 
-	double rr=rf->c.max_radius_squared(); rr=sqrt(rr);
 	double rx,ry;
 	rf->c.centroid(rx,ry);
-	for (int k=0; k<100; k++) {
+	// Adjust rescalings done by Voro++
+	rx*=2; ry*=2;
+	double rr=rf->max_rad_sq(rx,ry); rr=sqrt(rr);
+	for (int k=0; k<sim_flatfold_max_attempts; k++) {
 		double th_p = 2*M_PI*gsl_rng_uniform(rng);
 		double r_p = rr * sqrt(gsl_rng_uniform(rng));
 		px = r_p * cos(th_p) + rx;
 		py = r_p * sin(th_p) + ry;
 		if (rf->point_inside(px, py)) break;
-		if (k == sim_flatfold_max_attempts - 1) {
+		if (k == sim_flatfold_max_attempts-1) {
 			fputs("Too many attempts to find a point in the facet in random_fold2\n", stderr);
 			exit(1);
 		}
