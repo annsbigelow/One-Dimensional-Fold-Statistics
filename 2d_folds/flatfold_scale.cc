@@ -41,9 +41,8 @@ int main(int argc,char **argv) {
 				for (int i=0;i<max_fold-1;){ 
 					ff.random_fold1();
 					ff.compute_bounds();
-					fo[i] = ff.f.size();
+					fo[++i] = ff.f.size();    // CHR: the ++i needs to happen here because the stats need to be binned into the next array element
 					ff.crease_mileage(pos[i], neg[i]);
-					++i;
 				}
 			}
 			else if (fold_option==0){
@@ -54,9 +53,10 @@ int main(int argc,char **argv) {
 				}
 			}
 			else if (fold_option==2){
+                double t_area=ff.tot_area();
 				for (int i=0; i<max_fold-1;){ 
-					ff.random_fold2();
-					if (++i%3==0) ff.compute_bounds();
+					ff.random_fold2(t_area);
+                    ++i;
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 				}

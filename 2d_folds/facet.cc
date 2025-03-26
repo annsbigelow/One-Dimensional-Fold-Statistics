@@ -59,6 +59,27 @@ bool facet::intersects(double nx,double ny,double di) {
 	return c.plane_intersects(nx,ny,di)==c.plane_intersects(-nx,-ny,-di);
 }
 
+/** Computes a bounding rectangle for the facet.
+ * \param[in] (lx,ux) the bounding coordinate range in the x direction.
+ * \param[in] (ly,uy) the bounding coordinate range in the y direction. */
+void facet::rect_bounds(double &lx,double &ux,double &ly,double &uy) {
+    double *ptsp=c.pts,*ptse=c.pts+2*c.p;
+
+    // Initially set the bounds based on the first vertex
+    lx=ux=*ptsp;
+    ly=uy=ptsp[1];
+
+    // Consider additional vertices and update the bounds
+    ptsp+=2;
+    while(ptsp<ptse) {
+        if(*ptsp<lx) lx=*ptsp;
+        else if(*ptsp>ux) ux=*ptsp;
+        if(ptsp[1]<ly) ly=ptsp[1];
+        else if(ptsp[1]>uy) uy=ptsp[1];
+        ptsp+=2;
+    }
+}
+
 /** Mirrors the facet about a given plane.
  * \param[in] (nx,ny) the normal vector of the plane.
  * \param[in] di the displacement of the plane. */

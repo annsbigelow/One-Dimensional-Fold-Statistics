@@ -1,6 +1,6 @@
 # Compiler and compilation flags
 cc=gcc
-cxx=g++-mp-14 -fopenmp
+cxx=g++-mp-14 -fopenmp -Wno-deprecated-declarations
 cflags=-Wall -ansi -pedantic -march=native -O3
 
 # MPI compiler

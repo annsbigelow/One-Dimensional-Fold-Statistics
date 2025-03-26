@@ -78,50 +78,42 @@ void sim_flatfold::random_fold3(bool rand_sign) {
 	exit(1);
 }
 
+/** Computes the total area of the facets, which should remain constant
+ * during folding.
+ * \return The total area. */
+double sim_flatfold::tot_area() {
+    double t_area=f[0]->area();
+	for(unsigned int k=1; k<f.size(); k++) t_area+=f[k]->area();
+    return t_area;
+}
+
 /** Chooses a random point in a facet weighted via area and applies a fold there.
-* \param[in] rand_sign whether to choose a random sign for the fold or not. */
-void sim_flatfold::random_fold2(bool rand_sign) {
-	double t_area=0.0, cumulative=0.0;
-	facet *rf = new facet(*f[0]);
-	// Compute the total area of each facet
-	for (unsigned int k=0; k<f.size(); k++) {
-		if (f[k]->flipped) t_area-=f[k]->c.area();
-		else t_area+=f[k]->c.area();
-	}
-	double x=t_area*gsl_rng_uniform(rng);
-	for (unsigned int k=0; k<f.size(); k++) {
-		if (f[k]->flipped) cumulative -= f[k]->c.area();
-		else cumulative += f[k]->c.area();
-		if (x<=cumulative) {
-			delete rf;
-			rf = new facet(*f[k]);
-			break;
-		}
-	}
-	if (!rf) {
-		fputs("Error: unable to choose a random facet.\n", stderr); 
-		exit(1);
-	}
+ * \param[in] t_area the precomputed total area of the sheet.
+ * \param[in] rand_sign whether to choose a random sign for the fold or not. */
+void sim_flatfold::random_fold2(double t_area,bool rand_sign) {
 
+    // Select a random facet, weighted according to their area
+	double x=t_area*gsl_rng_uniform(rng),cu=0;
+    unsigned int k=0;
+    while(k<f.size()-1) {
+        cu+=f[k]->area();
+        if(cu>x) break;
+        k++;
+    }
+    facet *rf=f[k];
 
-	double rx,ry;
-	rf->c.centroid(rx,ry);
-	// Adjust rescalings done by Voro++
-	rx*=2; ry*=2;
-	double rr=rf->max_rad_sq(rx,ry); rr=sqrt(rr);
-	for (int k=0; k<sim_flatfold_max_attempts; k++) {
-		double th_p = 2*M_PI*gsl_rng_uniform(rng);
-		double r_p = rr * sqrt(gsl_rng_uniform(rng));
-		px = r_p * cos(th_p) + rx;
-		py = r_p * sin(th_p) + ry;
-		if (rf->point_inside(px, py)) {
-			delete rf;
+	// Find a random point in the chosen facet
+	double lx,ux,ly,uy;
+    rf->rect_bounds(lx,ux,ly,uy);
+	for(int k=0; k<sim_flatfold_max_attempts; k++) {
+        px=lx+(ux-lx)*gsl_rng_uniform(rng);
+        py=ly+(uy-ly)*gsl_rng_uniform(rng);
+		if(rf->point_inside(px, py)) {
 			random_flatfold_point(rand_sign);
 			return;
 		}
 	}
 	fputs("Too many attempts to find a point in the facet in random_fold2\n", stderr);
-	delete rf;
 	exit(1);
 }
 

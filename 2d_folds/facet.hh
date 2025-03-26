@@ -31,7 +31,14 @@ struct facet {
 	void unfolded_crease(FILE *fp,bool positive);
 	void crease_mileage(double &pos,double &neg);
 	void output(FILE *fp);
+    void rect_bounds(double &lx,double &ux,double &ly,double &uy);
 	vec transform(int k);
+    /** For flipped facets, Voro++ reports their areas as negative. This
+     * function returns their area, accounting for the flipped sign.
+     * \return The facet area. */
+    inline double area() {
+        return flipped?-c.area():c.area();
+    }
 };
 
 #endif

@@ -26,7 +26,7 @@ class sim_flatfold {
 		void random_radial_fold(bool rand_sign=false);
 		void random_fold5(bool rand_sign = false);
 		void random_fold3(bool rand_sign=false);
-		void random_fold2(bool rand_sign=false);
+		void random_fold2(double t_area,bool rand_sign=false);
 		void random_fold1(bool rand_sign=false);
 		void random_fold(double frac,bool rand_sign=false);
 		bool flatfold(double nx,double ny,double di,int fsign=1);
@@ -60,6 +60,7 @@ class sim_flatfold {
 			gsl_rng_set(rng,seed);
 		}
 		bool point_inside(double x,double y);
+        double tot_area();
 	private:
 		/** Picks a random sign for a fold.
 		 * \return The sign. */
