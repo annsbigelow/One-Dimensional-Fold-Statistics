@@ -12,7 +12,7 @@ int main(int argc,char **argv) {
 	if(argc!=3) {
 		fputs("Syntax: ./flatfold_scale <seed> <fold_option>\n"
 			"fold_option=0 for standard random fold; 1 to choose a random point then angle; " 
-				"2 to choose a random point uniformly on [-1,1]^2, 3 to choose a random angle then point\n",stderr);
+				"2 to choose a random point uniformly on [-1,1]^2, 3 to choose a random angle then displacement\n",stderr);
 		return 1;
 	}
 	int seed=atoi(argv[1]);
@@ -23,6 +23,7 @@ int main(int argc,char **argv) {
 	       *sm=sll+max_fold,*smm=sm+max_fold,
 	       *sd=smm+max_fold,*sdd=sd+max_fold;
 	for(int k=0;k<6*max_fold;k++) sl[k]=0;
+	unsigned int mxf = 0, mnf = 3000000, fsz; //may be out of scope
 
 	// Create many random folding instances, and count the number of facets
 	// as a function of the folds
@@ -64,14 +65,14 @@ int main(int argc,char **argv) {
 			else if (fold_option==3){
 				for (int i=0; i<max_fold-1;){
 					ff.random_fold3();
-					if (++i%3==0) ff.compute_bounds(); // This may not even be necessary
+					++i;
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 				}
 			}
 
 #pragma omp critical
-			{
+			{	
 				// Store the facet numbers and print a diagnostic message
 				printf("%d",j);
 				for(int i=0;i<max_fold;i++) {
@@ -85,8 +86,11 @@ int main(int argc,char **argv) {
 				}
 				putchar('\n');
 			}
+			fsz=fo[max_fold-2];
+			if (fsz<mnf) mnf=fsz; else if (fsz>mxf) mxf=fsz;
 		}
 	}
+	printf("Minimum number of facets: %d\nMaximum number of facets: %d\n",mnf,mxf); // may be out of scope
 
 	// Output the mean and standard deviation of the number of facets
 	char buf[256];
