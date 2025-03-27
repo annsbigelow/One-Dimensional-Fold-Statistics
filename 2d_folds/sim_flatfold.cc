@@ -52,7 +52,7 @@ void sim_flatfold::compute_bounds() {
 * a random displacement.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold3(bool rand_sign) {
-	double th = M_PI*gsl_rng_uniform(rng);
+	double th = 2*M_PI*gsl_rng_uniform(rng);
 	double nx = cos(th);
 	double ny = sin(th);
 	// Find extremal vertices with respect to the normal vector 
@@ -123,10 +123,11 @@ void sim_flatfold::random_fold2(double t_area,bool rand_sign) {
 * \param[in] rand_sign whether to choose a random sign for the fold or not.
 */
 void sim_flatfold::random_flatfold_point(bool rand_sign) {
-	double th=M_PI*gsl_rng_uniform(rng);
-	double nx=-cos(th);
-	double ny=sin(th);
-	double di=-px*nx-py*ny;
+	double th=2*M_PI*gsl_rng_uniform(rng);
+	double nx=-sin(th);
+	double ny=cos(th);
+	if (ny<0) {nx=-nx; ny=-ny;}
+	double di=px*nx+py*ny;
 	flatfold(nx,ny,di,rand_sign?random_sign():1);
 }
 

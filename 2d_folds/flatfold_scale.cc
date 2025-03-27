@@ -23,8 +23,7 @@ int main(int argc,char **argv) {
 	       *sm=sll+max_fold,*smm=sm+max_fold,
 	       *sd=smm+max_fold,*sdd=sd+max_fold;
 	for(int k=0;k<6*max_fold;k++) sl[k]=0;
-	unsigned int mxf = 0, mnf = 3000000, fsz; //may be out of scope
-
+	unsigned int mxf = 0, mnf = 3000000, fsz;
 	// Create many random folding instances, and count the number of facets
 	// as a function of the folds
 #pragma omp parallel
@@ -91,7 +90,6 @@ int main(int argc,char **argv) {
 		}
 	}
 	printf("Minimum number of facets: %d\nMaximum number of facets: %d\n",mnf,mxf); // may be out of scope
-
 	// Output the mean and standard deviation of the number of facets
 	char buf[256];
 	sprintf(buf,"ff%d_scale_%d.dat",fold_option,seed);
