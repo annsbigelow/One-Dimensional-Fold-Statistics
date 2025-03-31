@@ -12,7 +12,8 @@ int main(int argc,char **argv) {
 	if(argc!=3) {
 		fputs("Syntax: ./flatfold_scale <seed> <fold_option>\n"
 			"fold_option=0 for standard random fold; 1 to choose a random point then angle; " 
-				"2 to choose a random point uniformly on [-1,1]^2, 3 to choose a random angle then displacement\n",stderr);
+				"2 to choose a random point uniformly on [-1,1]^2, 3 to choose a random angle then displacement; "
+				"4 to pick a random angle followed by a uniformly chosen displacement\n",stderr);
 		return 1;
 	}
 	int seed=atoi(argv[1]);
@@ -66,6 +67,14 @@ int main(int argc,char **argv) {
 					ff.random_fold3();
 					++i;
 					fo[i] = ff.f.size();
+					ff.crease_mileage(pos[i], neg[i]);
+				}
+			}
+			else if (fold_option==4) {
+				for (int i=0; i<max_fold-1;) {
+					ff.random_fold4();
+					if (++i%2==0) ff.compute_bounds();
+					fo[i]=ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 				}
 			}

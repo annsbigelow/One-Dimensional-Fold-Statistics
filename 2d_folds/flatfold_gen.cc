@@ -10,7 +10,8 @@ int main(int argc,char **argv) {
 		fputs("Syntax: ./flatfold_gen <num_folds> [<seed>] [<percent_radial>] [<sign>] [<fold_option>]\n\n"
 		      "sign=0 for positive folds, sign=1 for folds with random sign\n"
 			"fold_option=0 for standard random fold; 1 to choose a random point then angle; " 
-			"2 to choose a random point uniformly on [-1,1]^2; 3 to choose a random angle then point\n",stderr);
+			"2 to choose a random point uniformly on [-1,1]^2; 3 to choose a random angle then point; "
+			"4 to pick a random angle followed by a uniformly chosen displacement\n",stderr);
 		return 1;
 	}
 
@@ -53,9 +54,10 @@ int main(int argc,char **argv) {
 	ff.seed(seed);
 	while(i<folds) {
 		if(fold_option==1) {ff.random_fold1(rand_sign); ff.compute_bounds(); ++i;}
-		else if(fold_option==0) {ff.random_fold(frac,rand_sign); if(++i%3==0)ff.compute_bounds();}
-		else if(fold_option==2) {ff.random_fold2(rand_sign); if(++i%3==0)ff.compute_bounds();}
-		else if(fold_option==3)	{ff.random_fold3(rand_sign); if(++i%3==0)ff.compute_bounds();}
+		else if(fold_option==0) {ff.random_fold(frac,rand_sign); if(++i%3==0) ff.compute_bounds();}
+		else if(fold_option==2) {ff.random_fold2(rand_sign);}
+		else if(fold_option==3)	{ff.random_fold3(rand_sign);}
+		else if(fold_option==4) {ff.random_fold4(rand_sign); if(++i%2==0) ff.compute_bounds();}
 	}
 
 	// Output positive and negative creases, plus the shape of the folded

@@ -48,7 +48,25 @@ void sim_flatfold::compute_bounds() {
 	cr=sqrt(crsq);
 }
 
-/** Applies a fold to the sheet by choosing a random angle first, followed by 
+/** Applies a fold by picking a random angle followed by a uniformly chosen displacement
+* using the bounding circle.
+* \param[in] rand_sign whether to choose a random sign for the fold or not. */
+void sim_flatfold::random_fold4(bool rand_sign) {
+	double th = 2*M_PI*gsl_rng_uniform(rng);
+	double nx = cos(th);
+	double ny = sin(th);
+
+	// Choose an angle uniformly using the radius of the bounding circle.
+	// Now we must check that the fold is non-trivial.
+	for (int k=0; k<sim_flatfold_max_attempts; k++) {
+		double di = cr*(2*gsl_rng_uniform(rng)-1);
+		if (flatfold(nx,ny,di,rand_sign?random_sign():1)) return;
+	}
+	fputs("Too many fold attempts in fold4.\n",stderr);
+	exit(1);
+}
+
+/** Applies a fold by choosing a random angle followed by 
 * a random displacement.
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold3(bool rand_sign) {
@@ -70,11 +88,11 @@ void sim_flatfold::random_fold3(bool rand_sign) {
 		} while (k!=0);
 	}
 
-	for (int k=0; k<10; k++) {
-		double di = min+(max-min)*gsl_rng_uniform(rng);
-		if (flatfold(nx, ny, di, rand_sign?random_sign():1)) return;
-	}
-	fputs("Too many flatfold attempts in random_fold3\n", stderr);
+	//for (int k=0; k<10; k++) {
+		double di = min+(max-min)*gsl_rng_uniform(rng); // this displacement should make a valid fold. 
+		if (flatfold(nx, ny, di, rand_sign?random_sign():1)) return; 
+	//}
+	fputs("random_fold3 unsuccessful\n", stderr);
 	exit(1);
 }
 
@@ -136,7 +154,7 @@ void sim_flatfold::random_flatfold_point(bool rand_sign) {
 * \param[in] rand_sign whether to choose a random sign for the fold or not. */
 void sim_flatfold::random_fold1(bool rand_sign) {
 	for (int k=0; k < sim_flatfold_max_attempts; k++) {
-		double th_p = 2 * M_PI * gsl_rng_uniform(rng);
+		double th_p = 2*M_PI*gsl_rng_uniform(rng);
 		double r_p = cr*sqrt(gsl_rng_uniform(rng));
 		px = r_p * cos(th_p) + cx;
 		py = r_p * sin(th_p) + cy;
