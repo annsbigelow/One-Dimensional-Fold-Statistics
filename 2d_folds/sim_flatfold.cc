@@ -59,8 +59,7 @@ void sim_flatfold::random_fold4(bool rand_sign) {
 	// Choose an angle uniformly using the radius of the bounding circle.
 	// Now we must check that the fold is non-trivial.
 	for (int k=0; k<sim_flatfold_max_attempts; k++) {
-		double di = cr*(2*gsl_rng_uniform(rng)-1);
-		if (flatfold(nx,ny,di,rand_sign?random_sign():1)) return;
+		if (flatfold(nx,ny,cx*nx+cy*ny+cr*(-1+2*gsl_rng_uniform(rng)),rand_sign?random_sign():1)) return;
 	}
 	fputs("Too many fold attempts in fold4.\n",stderr);
 	exit(1);
