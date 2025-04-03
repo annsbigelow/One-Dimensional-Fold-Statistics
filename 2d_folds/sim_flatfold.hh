@@ -33,7 +33,7 @@ class sim_flatfold {
 		bool flatfold(double nx,double ny,double di,int fsign=1);
 		void radial_fold(double x,double y,double ro,double al,double be,int fsign=1);
 		void crease_map(FILE *fp,bool positive);
-		void find_ed_pts(double &epx, double &epy);
+		void ed_pts(double &epx, double &epy);
 		inline void crease_map(const char* filename,bool positive) {
 			FILE *fp=fopen(filename,"w");
 			if(fp==NULL) {

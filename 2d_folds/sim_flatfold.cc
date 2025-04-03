@@ -1,6 +1,7 @@
 #include "sim_flatfold.hh"
 #include <cstdlib>
 #include <cmath>
+#include <vector>
 
 //const double M_PI=3.1415926535897932384626433832795;
 
@@ -46,6 +47,70 @@ void sim_flatfold::compute_bounds() {
 	for(unsigned int i=0;i<f.size();i++)
 		if((rsq=f[i]->max_rad_sq(cx,cy))>crsq) crsq=rsq;
 	cr=sqrt(crsq);
+}
+
+/** Finds a random point on a random edge.
+* \param[out] (epx,epy) The coordinates of the point. */
+void sim_flatfold::ed_pts(double &epx, double &epy) {
+	std::vector<int> ct; // Use a vector because the size isn't initially obvious
+	std::vector<double> v; // use a 2D array?
+
+	// Ignore stacked edges
+	int j=0; 
+	for (int l=0; l<f.size(); l++) {
+		int k=0; 
+		do {
+			v.push_back(f[l]->c.pts[2*k]); v.push_back(f[l]->c.pts[2*k+1]);
+			int q=f[l]->c.ed[2*k];
+			v.push_back(f[l]->c.pts[2*q]); v.push_back(f[l]->c.pts[2*q+1]);
+			ct.push_back(1);
+			// Check for recurring edges from any other facet
+			for (int m=0; m<v.size();) {
+				if (j!=m && v[j]==v[m]&&v[j+1]==v[m+1]&&v[j+2]==v[m+2]&&v[j+3]==v[m+3]) ct[j/4]=0;
+				m+=4;
+			}
+			k=f[l]->c.ed[2*k];
+			j+=4;
+		} while (k!=0);
+	}
+
+	// Pick a random edge using nonzero entries of ct 
+	std::vector<int> nz;
+	for (unsigned int k=0; k<ct.size(); k++) { if (ct[k]!=0) nz.push_back(k); }
+	if (nz.empty()) { fputs("Unable to find edges\n",stderr); exit(1); }
+	unsigned int idx = gsl_rng_uniform_int(rng, nz.size());
+	idx=nz[idx]*4; // v has four times the size of ct.
+	double v1x=v[idx], v1y=v[idx+1], v2x=v[idx+2], v2y=v[idx+3];
+
+	epx = v1x + (v2x-v1x)*gsl_rng_uniform(rng); epy = v1y + (v2y-v1y)*gsl_rng_uniform(rng);
+}
+
+/** Uses two points along the boundary to fold the sheet.
+* \param[in] rand_sign whether to choose a random sign for the fold or not. */
+void sim_flatfold::random_fold5(bool rand_sign) {
+	/* Loop a few times in case two points are chosen 
+	along the same edge and the fold is trivial. */
+	for (int k=0; k<10; k++) {
+		bool p1=true, p2=true;
+		int j = 0;
+		while (j<sim_flatfold_max_attempts && (p1||p2)) {
+			if (p1) { find_ed_pts(p1x,p1y); p1 = point_inside(p1x,p1y); }
+			if (p2) { find_ed_pts(p2x,p2y); p2 = point_inside(p2x,p2y); }
+			j++;
+		}
+		if (p1||p2) { fputs("Too many attempts to find two boundary points.\n", stderr); exit(1); }
+		if (random_flatfold5(rand_sign)) return;
+	}
+	fputs("Too many trivial flat fold attempts.\n", stderr); exit(1);
+}
+
+/** Applies a random flat fold to the sheet using two edge points.
+* \param[in] rand_sign whether to choose a random sign for the fold or not.
+* \return Whether the fold intersected the sheet or not.*/
+bool sim_flatfold::random_flatfold5(bool rand_sign) {
+	double magn = 1/sqrt((p1y-p2y)*(p1y-p2y) + (p2x-p1x)*(p2x-p1x));
+	double nx = magn*(p1y-p2y), ny = magn * (p2x-p1x), di = p2x*nx+p2y*ny;
+	return flatfold(nx, ny, di, rand_sign?random_sign():1);
 }
 
 /** Applies a fold by picking a random angle followed by a uniformly chosen displacement
@@ -354,73 +419,6 @@ void sim_flatfold::crease_mileage(double &pos,double &neg) {
  * \param[in] fp the file handle to write to. */
 void sim_flatfold::output(FILE *fp) {
 	for(unsigned int i=0;i<f.size();i++) f[i]->output(fp);
-}
-
-/** Finds a random point on a random edge of a random facet.
-* This needs to be fixed.
-* \param[out] (epx,epy) The coordinates of the point.
-*/
-void sim_flatfold::find_ed_pts(double& epx, double& epy) {
-	// Choose a random facet 
-	unsigned int idx = gsl_rng_uniform_int(rng, f.size());
-	facet* rf = f[idx];
-
-	// Choose a random edge
-	int l = 0;
-	int edges = 0;
-	do { l = rf->c.ed[2 * l]; edges++; } while (l != 0);
-	int k = gsl_rng_uniform_int(rng, edges);
-	double v1x = rf->c.pts[2 * k], v1y = rf->c.pts[2 * k + 1];
-	k = rf->c.ed[2 * k];
-	double v2x = rf->c.pts[2 * k], v2y = rf->c.pts[2 * k + 1];
-
-	epx = v1x + (v2x - v1x) * gsl_rng_uniform(rng); epy = v1y + (v2y - v1y) * gsl_rng_uniform(rng);
-}
-
-/** Uses two points along the boundary to fold the sheet.
-* This method is currently bugged.
-* \param[in] rand_sign whether to choose a random sign for the fold or not.
-*/
-void sim_flatfold::random_fold5(bool rand_sign) {
-	for (int k = 0; k < sim_flatfold_max_attempts; k++) {
-		int j = 0;
-		do {
-			find_ed_pts(p1x, p1y);
-			if (j == sim_flatfold_max_attempts - 1) {
-				fputs("Too many attempts to find a first point on the edge of the sheet\n", stderr);
-				exit(1);
-			}
-			j++;
-		} while (point_inside(p1x, p1y));
-		j = 0;
-		do {
-			find_ed_pts(p2x, p2y);
-			if (j == sim_flatfold_max_attempts - 1) {
-				fputs("Too many attempts to find a second point on the edge of the sheet\n", stderr);
-				exit(1);
-			}
-			j++;
-
-		} while (point_inside(p2x, p2y));
-		if (random_flatfold5(rand_sign)) {
-			//	for (int l=0;l<f.size();l++) {printf("area of facet %d: %g\n",l,f[l]->c.area());}
-			return;
-		}
-	}
-	fputs("Too many flatfold attempts in random_fold2\n", stderr);
-	exit(1);
-}
-
-/** Applies a random flat fold to the sheet using two edge points and a chord.
-* This method is currently bugged.
-* \param[in] rand_sign whether to choose a random sign for the fold or not.
-* \return Whether the fold intersected the sheet or not.*/
-bool sim_flatfold::random_flatfold5(bool rand_sign) {
-	double magn = 1 / sqrt((p1y - p2y) * (p1y - p2y) + (p2x - p1x) * (p2x - p1x));
-	double nx = magn * (p1y - p2y);
-	double ny = magn * (p2x - p1x);
-	double di = p2x * nx + p2y * ny;
-	return flatfold(nx, ny, di, rand_sign ? random_sign() : 1);
 }
 
 /** Updates the vertices of the sheet after a fold. */
