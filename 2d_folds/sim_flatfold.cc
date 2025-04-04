@@ -56,7 +56,7 @@ void sim_flatfold::ed_pts(double &epx, double &epy) {
 	std::vector<double> v; // use a 2D array?
 
 	// Ignore stacked edges
-	int j=0; 
+	unsigned int j=0; 
 	for (unsigned int l=0; l<f.size(); l++) {
 		int k=0; 
 		do {
