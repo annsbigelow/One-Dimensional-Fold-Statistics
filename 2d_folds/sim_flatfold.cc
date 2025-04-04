@@ -57,7 +57,7 @@ void sim_flatfold::ed_pts(double &epx, double &epy) {
 
 	// Ignore stacked edges
 	int j=0; 
-	for (int l=0; l<f.size(); l++) {
+	for (unsigned int l=0; l<f.size(); l++) {
 		int k=0; 
 		do {
 			v.push_back(f[l]->c.pts[2*k]); v.push_back(f[l]->c.pts[2*k+1]);
@@ -65,7 +65,7 @@ void sim_flatfold::ed_pts(double &epx, double &epy) {
 			v.push_back(f[l]->c.pts[2*q]); v.push_back(f[l]->c.pts[2*q+1]);
 			ct.push_back(1);
 			// Check for recurring edges from any other facet
-			for (int m=0; m<v.size();) {
+			for (unsigned int m=0; m<v.size();) {
 				if (j!=m && v[j]==v[m]&&v[j+1]==v[m+1]&&v[j+2]==v[m+2]&&v[j+3]==v[m+3]) ct[j/4]=0;
 				m+=4;
 			}
@@ -94,8 +94,8 @@ void sim_flatfold::random_fold5(bool rand_sign) {
 		bool p1=true, p2=true;
 		int j = 0;
 		while (j<sim_flatfold_max_attempts && (p1||p2)) {
-			if (p1) { find_ed_pts(p1x,p1y); p1 = point_inside(p1x,p1y); }
-			if (p2) { find_ed_pts(p2x,p2y); p2 = point_inside(p2x,p2y); }
+			if (p1) { ed_pts(p1x,p1y); p1 = point_inside(p1x,p1y); }
+			if (p2) { ed_pts(p2x,p2y); p2 = point_inside(p2x,p2y); }
 			j++;
 		}
 		if (p1||p2) { fputs("Too many attempts to find two boundary points.\n", stderr); exit(1); }
