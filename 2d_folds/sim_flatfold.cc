@@ -75,7 +75,7 @@ void sim_flatfold::unique_ed() {
 /** Finds a random point on a random edge.
 * \param[out] (epx,epy) The coordinates of the point. */
 void sim_flatfold::ed_pts(double &epx, double &epy) {
-	unsigned int idx = gsl_rng_uniform_int(rng, 4*v.size());
+	unsigned int idx = gsl_rng_uniform_int(rng, v.size());
 	double v1x=v[idx][0], v1y=v[idx][1], v2x=v[idx][2], v2y=v[idx][3];
 
 	epx = v1x + (v2x-v1x)*gsl_rng_uniform(rng); epy = v1y + (v2y-v1y)*gsl_rng_uniform(rng);
