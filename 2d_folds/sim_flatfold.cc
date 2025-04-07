@@ -49,38 +49,35 @@ void sim_flatfold::compute_bounds() {
 	cr=sqrt(crsq);
 }
 
+/** Cycles through all facet edges in the sheet and keeps only one copy of each.
+* \return A two-dimensional vector of the unique edges. */
+std::vector<std::vector<double>> sim_flatfold::unique_ed() {
+	// All of the edges of the sheet are looped through each time a fold occurs. 
+	// Instead, we could track the total unique edges separately by only checking edges of newly added facets.
+	std::vector<std::vector<double>> v;
+	for (unsigned int l = 0; l < f.size(); l++) {
+		int k = 0;
+		do {
+			int q = f[l]->c.ed[2*k];
+			std::vector<double> set = { f[l]->c.pts[2*k],f[l]->c.pts[2*k+1],f[l]->c.pts[2*q],f[l]->c.pts[2*q+1] };
+			bool twin = false;
+			for (unsigned int m=0; m<v.size(); m++) {
+				if (v[m] == set) { twin = true; break; }
+			}
+			if (!twin) v.push_back(set);
+			k = q; // Make sure to count each edge
+		} while (k!=0);
+	}
+	if (v.empty()) { fputs("Unable to find edges\n", stderr); exit(1); }
+	return v;
+}
+
 /** Finds a random point on a random edge.
 * \param[out] (epx,epy) The coordinates of the point. */
 void sim_flatfold::ed_pts(double &epx, double &epy) {
-	std::vector<int> ct; // Use a vector because the size isn't initially obvious
-	std::vector<double> v; // use a 2D array?
-
-	// Ignore stacked edges
-	unsigned int j=0; 
-	for (unsigned int l=0; l<f.size(); l++) {
-		int k=0; 
-		do {
-			v.push_back(f[l]->c.pts[2*k]); v.push_back(f[l]->c.pts[2*k+1]);
-			int q=f[l]->c.ed[2*k];
-			v.push_back(f[l]->c.pts[2*q]); v.push_back(f[l]->c.pts[2*q+1]);
-			ct.push_back(1);
-			// Check for recurring edges from any other facet
-			for (unsigned int m=0; m<v.size();) {
-				if (j!=m && v[j]==v[m]&&v[j+1]==v[m+1]&&v[j+2]==v[m+2]&&v[j+3]==v[m+3]) ct[j/4]=0;
-				m+=4;
-			}
-			k=f[l]->c.ed[2*k];
-			j+=4;
-		} while (k!=0);
-	}
-
-	// Pick a random edge using nonzero entries of ct 
-	std::vector<int> nz;
-	for (unsigned int k=0; k<ct.size(); k++) { if (ct[k]!=0) nz.push_back(k); }
-	if (nz.empty()) { fputs("Unable to find edges\n",stderr); exit(1); }
-	unsigned int idx = gsl_rng_uniform_int(rng, nz.size());
-	idx=nz[idx]*4; // v has four times the size of ct.
-	double v1x=v[idx], v1y=v[idx+1], v2x=v[idx+2], v2y=v[idx+3];
+	std::vector<std::vector<double>> v = unique_ed();
+	unsigned int idx = gsl_rng_uniform_int(rng, 4*v.size());
+	double v1x=v[idx][0], v1y=v[idx][1], v2x=v[idx][2], v2y=v[idx][3];
 
 	epx = v1x + (v2x-v1x)*gsl_rng_uniform(rng); epy = v1y + (v2y-v1y)*gsl_rng_uniform(rng);
 }

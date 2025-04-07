@@ -34,6 +34,7 @@ class sim_flatfold {
 		void radial_fold(double x,double y,double ro,double al,double be,int fsign=1);
 		void crease_map(FILE *fp,bool positive);
 		void ed_pts(double &epx, double &epy);
+		std::vector<std::vector<double>> unique_ed();
 		inline void crease_map(const char* filename,bool positive) {
 			FILE *fp=fopen(filename,"w");
 			if(fp==NULL) {
