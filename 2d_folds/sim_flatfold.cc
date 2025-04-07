@@ -51,15 +51,16 @@ void sim_flatfold::compute_bounds() {
 
 /** Cycles through all facet edges in the sheet and keeps only one copy of each.
 * \return A two-dimensional vector of the unique edges. */
-std::vector<std::vector<double>> sim_flatfold::unique_ed() {
+void sim_flatfold::unique_ed() {
 	// All of the edges of the sheet are looped through each time a fold occurs. 
 	// Instead, we could track the total unique edges separately by only checking edges of newly added facets.
-	std::vector<std::vector<double>> v;
 	for (unsigned int l = 0; l < f.size(); l++) {
 		int k = 0;
 		do {
 			int q = f[l]->c.ed[2*k];
-			std::vector<double> set = { f[l]->c.pts[2*k],f[l]->c.pts[2*k+1],f[l]->c.pts[2*q],f[l]->c.pts[2*q+1] };
+			std::vector<double> set;
+			set.push_back(f[l]->c.pts[2*k]); set.push_back(f[l]->c.pts[2*k+1]);
+			set.push_back(f[l]->c.pts[2*q]); set.push_back(f[l]->c.pts[2*q+1]);
 			bool twin = false;
 			for (unsigned int m=0; m<v.size(); m++) {
 				if (v[m] == set) { twin = true; break; }
@@ -69,13 +70,11 @@ std::vector<std::vector<double>> sim_flatfold::unique_ed() {
 		} while (k!=0);
 	}
 	if (v.empty()) { fputs("Unable to find edges\n", stderr); exit(1); }
-	return v;
 }
 
 /** Finds a random point on a random edge.
 * \param[out] (epx,epy) The coordinates of the point. */
 void sim_flatfold::ed_pts(double &epx, double &epy) {
-	std::vector<std::vector<double>> v = unique_ed();
 	unsigned int idx = gsl_rng_uniform_int(rng, 4*v.size());
 	double v1x=v[idx][0], v1y=v[idx][1], v2x=v[idx][2], v2y=v[idx][3];
 
@@ -87,6 +86,7 @@ void sim_flatfold::ed_pts(double &epx, double &epy) {
 void sim_flatfold::random_fold5(bool rand_sign) {
 	/* Loop a few times in case two points are chosen 
 	along the same edge and the fold is trivial. */
+	unique_ed();
 	for (int k=0; k<10; k++) {
 		bool p1=true, p2=true;
 		int j = 0;

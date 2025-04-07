@@ -34,7 +34,7 @@ class sim_flatfold {
 		void radial_fold(double x,double y,double ro,double al,double be,int fsign=1);
 		void crease_map(FILE *fp,bool positive);
 		void ed_pts(double &epx, double &epy);
-		std::vector<std::vector<double>> unique_ed();
+		void unique_ed();
 		inline void crease_map(const char* filename,bool positive) {
 			FILE *fp=fopen(filename,"w");
 			if(fp==NULL) {
@@ -70,9 +70,9 @@ class sim_flatfold {
 			return gsl_rng_get(rng)&1?-1:1;
 		}
 		void update_bounding_circle(facet *f);
-		/** A vector holding the coordinates of the sheet's vertices. 
+		/** A vector storing the unique edges of the sheet. 
 		*/
-		std::vector<double> v;
+		std::vector<std::vector<double> > v;
 		/** The x-coordinate of a first random point along the 
 		* edge of the sheet. */
 		double p1x;
