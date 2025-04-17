@@ -53,7 +53,10 @@ void sim_flatfold::compute_bounds() {
 * \return A two-dimensional vector of the unique edges. */
 void sim_flatfold::unique_ed() {
 	// All of the edges of the sheet are looped through each time a fold occurs. 
-	// Instead, we could track the total unique edges separately by only checking edges of newly added facets.
+	// Instead, we could track the total unique edges separately by only checking edges of newly added facets
+	// when a fold occurs. But then we'd have to delete corresponding edges of some facets and replace them with new ones,
+	// so we need to associate edges as belonging to certain facets in case those are deleted.
+	v.clear();
 	for (unsigned int l = 0; l < f.size(); l++) {
 		int k = 0;
 		do {
