@@ -40,10 +40,10 @@ int main(int argc,char **argv) {
 			// Perform random folds, according to the chosen random fold protocol,
 			// and store the number of facets after each
 			if(fold_option==1){
-				for (int i=0;i<max_fold-1;){ 
+				for (int i=0;i<max_fold-1;){
 					ff.random_fold1();
 					ff.compute_bounds();
-					fo[++i] = ff.f.size();    // CHR: the ++i needs to happen here because the stats need to be binned into the next array element
+					fo[++i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 				}
 			}
@@ -55,10 +55,10 @@ int main(int argc,char **argv) {
 				}
 			}
 			else if (fold_option==2){
-                double t_area=ff.tot_area();
-				for (int i=0; i<max_fold-1;){ 
+                		double t_area=ff.tot_area();
+				for (int i=0; i<max_fold-1;){
 					ff.random_fold2(t_area);
-                    ++i;
+                    			++i;
 					fo[i] = ff.f.size();
 					ff.crease_mileage(pos[i], neg[i]);
 				}
@@ -89,7 +89,7 @@ int main(int argc,char **argv) {
 			}
 
 #pragma omp critical
-			{	
+			{
 				// Store the facet numbers and print a diagnostic message
 				printf("%d",j);
 				for(int i=0;i<max_fold;i++) {
@@ -104,10 +104,12 @@ int main(int argc,char **argv) {
 				putchar('\n');
 			}
 			fsz=fo[max_fold-2];
+			// Store the max and min sheets
 			if (fsz<mnf) mnf=fsz; else if (fsz>mxf) mxf=fsz;
 		}
 	}
-	printf("Minimum number of facets: %d\nMaximum number of facets: %d\n",mnf,mxf); // may be out of scope
+	printf("Minimum number of facets: %d\nMaximum number of facets: %d\n",mnf,mxf); 
+
 	// Output the mean and standard deviation of the number of facets
 	char buf[256];
 	sprintf(buf,"ff%d_scale_%d.dat",fold_option,seed);

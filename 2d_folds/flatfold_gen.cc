@@ -56,10 +56,11 @@ int main(int argc,char **argv) {
 	while(i<folds) {
 		if(fold_option==1) {ff.random_fold1(rand_sign); ff.compute_bounds(); ++i;}
 		else if(fold_option==0) {ff.random_fold(frac,rand_sign); if(++i%3==0) ff.compute_bounds();}
-		else if(fold_option==2) ff.random_fold2(rand_sign);
-		else if(fold_option==3)	ff.random_fold3(rand_sign);
+		else if(fold_option==2) {ff.random_fold2(rand_sign); ++i;}
+		else if(fold_option==3)	{ff.random_fold3(rand_sign); ++i;}
 		else if(fold_option==4) {ff.random_fold4(rand_sign); if(++i%2==0) ff.compute_bounds();}
-		else if(fold_option==5) ff.random_fold5(rand_sign);
+		else if(fold_option==5) {ff.random_fold5(rand_sign); ++i;}
+printf("fold %d occurred\n",i);
 	}
 
 	// Output positive and negative creases, plus the shape of the folded
