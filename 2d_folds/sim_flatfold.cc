@@ -121,7 +121,7 @@ void sim_flatfold::random_fold4(bool rand_sign) {
 	double nx = cos(th);
 	double ny = sin(th);
 
-	// Choose an angle uniformly using the radius of the bounding circle.
+	// Choose a displacement uniformly using the radius of the bounding circle.
 	// Now we must check that the fold is non-trivial.
 	for (int k=0; k<sim_flatfold_max_attempts; k++) {
 		if (flatfold(nx,ny,cx*nx+cy*ny+cr*(-1+2*gsl_rng_uniform(rng)),rand_sign?random_sign():1)) return;
