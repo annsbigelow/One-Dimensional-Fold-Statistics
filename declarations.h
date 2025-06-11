@@ -48,6 +48,7 @@ class folds_stats {
         vector<double> fold(vector<double> &segs_in);
         double getmin(vector<double> &segs_in);
         double getmax(vector<double> &segs_in);
+		void zeros(double *arr, int n);
         void display(vector<double> arr);
 
         std::ofstream data;

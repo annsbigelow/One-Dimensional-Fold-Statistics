@@ -61,7 +61,9 @@ void folds_stats::segdens(int &numplaces,string txt) {
     double *pavg = new double[numplaces],
            *range = new double[numplaces];
     vector<double> segs_i, segs_o; 
-    for (int i = 0; i < numplaces; i++) pavg[i] = 0;
+    // for (int i = 0; i < numplaces; i++) pavg[i] = 0;
+	zeros(pavg, numplaces);
+
     for (int w = 0; w < instance; w++) {
         segs_i = { 0,1 };
         for (int i = 0; i < n; i++) {
@@ -375,6 +377,12 @@ double folds_stats::getmax(vector<double> &segs_in) {
         }
     }
     return max;
+}
+
+// Fill an array with zeros 
+/* \param[in] n the size of the array */
+void folds_stats::zeros(double *arr, int n) {
+	for (int i = 0; i < n; i++) arr[i] = 0;
 }
 
 // Display vec function. For debug purposes only
