@@ -61,7 +61,7 @@ void folds_stats::segdens(int &numplaces,string txt) {
     double *pavg = new double[numplaces],
            *range = new double[numplaces];
     vector<double> segs_i, segs_o; 
-    // for (int i = 0; i < numplaces; i++) pavg[i] = 0;
+     //for (int i = 0; i < numplaces; i++) pavg[i] = 0;
 	zeros(pavg, numplaces);
 
     for (int w = 0; w < instance; w++) {

@@ -9,19 +9,19 @@ int main() {
     string filename;
     std::cout << "Input any number to seed the RNG:";
     std::cin >> seed;
-    std::cout << "Input the number of instances for averaging:";
+    std::cout << "Input the number of instances (~10,000) for averaging:";
     std::cin >> inst;
     std::cout << "Input the number of folds:";
     std::cin >> n;
-    std::cout << "Input the filename to write data to:";
+    std::cout << "Input a filename:";
     std::cin >> filename;
         
 	folds_stats fs(seed,inst,n); // if you want new sequence of random nums, change fs() seed input.
 	double t0 = omp_get_wtime();
 
 	// Segment Density
-	// Specify the bins spacing to find the density of facets. Usually we use ~200.
-	int s_divide = 200;
+	// Specify the bins spacing to find the density of facets. Usually we use ~256.
+	int s_divide = 256;
     fs.segdens(s_divide,filename);
          
 	// Test fold protocols
