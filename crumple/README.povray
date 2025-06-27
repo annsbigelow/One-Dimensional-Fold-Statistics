@@ -1,0 +1,24 @@
+To render the POV-Ray example:
+
+1. Create a spherical mesh using
+
+./sph_gen 1000 1000
+
+2. Unpack the binary mesh file to create POV-Ray cylinders:
+
+./unpack cyl sph_1000.bin sph_1000_c.pov
+
+3. Unpack the binary mesh file to create POV-Ray meshes:
+
+./unpack msh sph_1000.bin sph_1000_m.pov
+./unpack mtr sph_1000.bin sph_1000_t.pov
+
+4. Run POV-Ray on the file sph.pov that sets up the scene and includes the outputs from the 'unpack' utility:
+
+povray +H1200 +W1200 -J +A0.1 +Osph.png sph.pov
+
+You can run with slightly higher quality with this:
+
+povray +H1200 +W1200 +R6 -J +A0.01 +Osph.png sph.pov
+
+Changing sph.pov to use sph_1000_t.pov instead will switch off the normal interpolation, resulting in flat triangular facets for the mesh.
