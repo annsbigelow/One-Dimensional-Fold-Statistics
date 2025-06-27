@@ -360,7 +360,7 @@ void output_rand_mesh(FILE *fb,unsigned int seed,unsigned int num_nodes) {
     container_2d::iterator cli;
 
     // Voronoi cell with neighbor information
-    voronoicell_neighbor_2d c;
+    voronoicell_neighbor_2d c(con);
     std::vector<int> nei;
 
     // Loop through once to get the total number of edge connections.

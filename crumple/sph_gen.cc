@@ -12,11 +12,8 @@ const double boxl=1.2;
 // Set up the number of blocks that the container is divided into
 const int bl=14;
 
-// Set the number of particles that are going to be randomly introduced
-const int particles=2000;
-
 // Maximum number of edges to collect face information for
-const int nface=11;
+const int nface=12;
 
 // This function returns a random double between -1 and 1
 inline double rnds() {return static_cast<double>(rand())*(2./RAND_MAX)-1;}
@@ -49,7 +46,7 @@ int main(int argc,char **argv) {
     // Create a container with the geometry given above, and make it
     // non-periodic in each of the three coordinates. Allocate space for eight
     // particles within each computational block
-    container con(-boxl,boxl,-boxl,boxl,-boxl,boxl,bl,bl,bl,false,false,false,8);
+    container_3d con(-boxl,boxl,-boxl,boxl,-boxl,boxl,bl,bl,bl,false,false,false,8);
 
     // Add the custom shell wall object
     wall_shell ws(0,0,0,1,0.00001);
@@ -68,13 +65,14 @@ int main(int argc,char **argv) {
 
     // Perform the Lloyd iterations
     for(l=0;l<lloyd;l++) {
-        c_loop_all vl(con);
-        voronoicell c;
+        container_3d::iterator cli;
+        voronoicell_3d c(con);
         for(fp=faces;fp<faces+nface;fp++) *fp=0;
 
         // Move each Voronoi cell to its centroid position
-        if(vl.start()) do if(con.compute_cell(c,vl)) {
-            vl.pos(i,x,y,z,r);
+        for(cli=con.begin();cli<con.end();cli++) if(con.compute_cell(c,cli)) {
+            i=con.pid(cli);
+            con.pos(cli,x,y,z);
             c.centroid(dx,dy,dz);
             p[3*i]=x+dx;
             p[3*i+1]=y+dy;
@@ -84,11 +82,11 @@ int main(int argc,char **argv) {
             i=c.number_of_faces()-4;
             if(i<0) i=0;else if(i>=nface) i=nface-1;
             faces[i]++;
-        } while (vl.inc());
+        }
         con.clear();
 
         // Apply a random perturbation to the points
-        double fac=l<10*lloyd/9?0.1/sqrt(double(l)):0.;
+        double fac=0;//l<10*lloyd/9?0.1/sqrt(double(l)):0.;
         for(i=0;i<particles;i++) con.put(i,p[3*i]+fac*rnds(),
                 p[3*i+1]+fac*rnds(),p[3*i+2]+fac*rnds());
         printf("%d",l);
@@ -112,14 +110,14 @@ int main(int argc,char **argv) {
 
     // Create a table of all neighbor relations
     vector<int> vi;
-    voronoicell_neighbor c;
-    c_loop_all vl(con);
-    if(vl.start()) do if(con.compute_cell(c,vl)) {
-        i=vl.pid();qp=q+i*nface;
+    voronoicell_neighbor_3d c(con);
+    container_3d::iterator cli;
+    for(cli=con.begin();cli<con.end();cli++) if(con.compute_cell(c,cli)) {
+        i=con.pid(cli);qp=q+i*nface;
         c.neighbors(vi);
         if(vi.size()>nface+2) voro_fatal_error("Too many faces; boost nface",5);
         for(l=0;l<(signed int) vi.size();l++) if(vi[l]>=0) qp[qn[i]++]=vi[l];
-    } while (vl.inc());
+    }
 
     // Sort the connections in anti-clockwise order
     bool connect;

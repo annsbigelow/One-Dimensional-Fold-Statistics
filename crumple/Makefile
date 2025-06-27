@@ -4,7 +4,7 @@ include ../config.mk
 # Lists of files to be built
 objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o
 src=$(patsubst %.o,%.cc,$(objs) $(mg_objs))
-execs=ode_test ode_conv virt sheet_gen # sph_gen mesh_conv ssheet_test bsheet_test
+execs=ode_test ode_conv virt sheet_gen sph_gen #mesh_conv ssheet_test bsheet_test
 
 all: $(execs)
 

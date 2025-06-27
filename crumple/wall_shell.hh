@@ -6,7 +6,7 @@ using namespace voro;
 
 #include <cmath>
 
-struct wall_shell : public wall {
+struct wall_shell : public wall_3d {
     public:
         wall_shell(double xc_,double yc_,double zc_,double rc,double sc,int w_id_=-99)
             : w_id(w_id_), xc(xc_), yc(yc_), zc(zc_), lc(rc-sc), uc(rc+sc) {}
@@ -24,8 +24,8 @@ struct wall_shell : public wall {
             }
             return true;
         }
-        bool cut_cell(voronoicell &c,double x,double y,double z) {return cut_cell_base(c,x,y,z);}
-        bool cut_cell(voronoicell_neighbor &c,double x,double y,double z) {return cut_cell_base(c,x,y,z);}
+        bool cut_cell(voronoicell_3d &c,double x,double y,double z) {return cut_cell_base(c,x,y,z);}
+        bool cut_cell(voronoicell_neighbor_3d &c,double x,double y,double z) {return cut_cell_base(c,x,y,z);}
     private:
         const int w_id;
         const double xc,yc,zc,lc,uc;
