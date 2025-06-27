@@ -27,10 +27,7 @@ int main() {
 
     // Set up springs.
     mp.setup_springs();
-
-    /* Allocate memory for integration and
-    auxiliary arrays for multithreading. */
-    mp.allocate(6*mp.n,4);
+    mp.allocate(6*mp.n);
 
     // Add Gaussian displacement around the central location
     for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3)
@@ -48,6 +45,6 @@ int main() {
     // Setup the output directory.
     mp.setup_output_dir("srun_b.out");
 
-    // Evolve in time with equally spaced output.
-    mp.solve(mp.pts,0,50000,0.5,101);
+    // Evolve in time with equally spaced output
+    mp.solve_adaptive(1,1e-4,1e-4,false,101);
 }

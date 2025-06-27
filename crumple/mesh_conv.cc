@@ -35,7 +35,7 @@ int main() {
 
     // Compute a reference solution and store it
     h=tmax/nref;
-    for(i=0;i<nref;i++) mp.step(mp.pts,h);
+    for(i=0;i<nref;i++) mp.fixed_step(h);
     double *refsol=new double[mp.dof];
     memcpy(refsol,mp.pts,sz);
 
@@ -46,7 +46,7 @@ int main() {
         h=tmax/n;
         memcpy(mp.pts,ipts,sz);
         mp.t=0;
-        for(i=0;i<n;i++) mp.step(mp.pts,h);
+        for(i=0;i<n;i++) mp.fixed_step(h);
 
         // Print difference between numerical and exact solution
         nor=0.;

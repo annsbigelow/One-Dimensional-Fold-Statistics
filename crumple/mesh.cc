@@ -6,7 +6,7 @@
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
-    n_ep(0), reg(NULL), tree(NULL), odir(NULL), nt(1) {
+    n_ep(0), reg(NULL), odir(NULL), nt(1) {
     FILE *fp=safe_fopen(filename,"rb");
     read_topology(fp);
     read_positions(fp);
@@ -19,7 +19,7 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
  * \param[in] f_topo the file to read the mesh topology from.
  * \param[in] f_pts the file to read the vertex positions from. */
 mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
-    mesh_param(mp), n_ep(0), reg(NULL), tree(NULL), odir(NULL), nt(1) {
+    mesh_param(mp), n_ep(0), reg(NULL), odir(NULL), nt(1) {
 
     // Read in the mesh topology
     FILE *fp=safe_fopen(f_topo,"rb");
@@ -35,14 +35,6 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
 /** The class destructor frees the dynamically allocated memory. */
 mesh::~mesh() {
     if(odir!=NULL) delete [] odir;
-    if(tree!=NULL) {
-        delete [] sn;
-        delete [] lf;
-        for(int j=2*n-2;j>=0;j--) {
-            delete [] tree[j];
-        }
-        delete [] tree;
-    }
     if(nt>1) {
         for(int j=nt-1;j>=0;j--) {
             delete [] pfu[j];
@@ -229,23 +221,20 @@ void mesh::reset_relaxed() {
     }
 }
 
-void mesh::mesh_ff(double t_,double *in,double *out,int j) {
+void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
-    int i,is=(nt==1)?0:pld[j],ie=(nt==1)?n:pld[j+1];
+    int i;
 
     // Compute drag
-    for(double *ap=acc+3*is,*vp=in+3*n+3*is;ap<acc+3*ie;) *(ap++)=-*(vp++)*drag;
-
-    // Update bounds; implicit barrier at the end of update_tree
-    if(tree!=NULL) update_tree(in,j);
+    for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
 
     // Add accelerations due to springs and external potentials
-    acceleration(t_,in,acc,j);
+    acceleration(t_,in,acc);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
-        for(i=is;i<ie;i++) {
+        for(i=0;i<n;i++) {
             if(ncn[i]&bflag) {
                 out[3*i]=out[3*i+1]=out[3*i+2]=0;
                 acc[3*i]=acc[3*i+1]=acc[3*i+2]=0;
@@ -255,7 +244,7 @@ void mesh::mesh_ff(double t_,double *in,double *out,int j) {
                 out[3*i+2]=in[3*n+3*i+2];
             }
         }
-    } else for(i=is;i<ie;i++) {
+    } else for(i=0;i<n;i++) {
         out[3*i]=in[3*n+3*i];
         out[3*i+1]=in[3*n+3*i+1];
         out[3*i+2]=in[3*n+3*i+2];
@@ -266,18 +255,16 @@ void mesh::mesh_ff(double t_,double *in,double *out,int j) {
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions.
  * \param[in] out the mesh point accelerations (cumulative). */
-void mesh::acceleration(double t_,double *in,double *acc,int j) {
-    int is=(nt==1)?0:pld[j],ie=(nt==1)?n:pld[j+1];
+void mesh::acceleration(double t_,double *in,double *acc) {
 
     // Add repulsive forces if present
-    if(repulsion) accel_repulsive(in,acc,j);
-    #pragma omp barrier
+    //if(repulsion) accel_repulsive(in,acc);
 
     // Compute accelerations from the sheet
-    bsheet_model?accel_rbsheet(in,acc,j):accel_springs(in,acc,j);
+    bsheet_model?accel_rbsheet(in,acc):accel_springs(in,acc);
 
     // Add accelerations from the external potentials
-    for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,is,ie,in,acc);
+    for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
 }
 
 /** Computes the energy.
@@ -295,112 +282,36 @@ double mesh::energy(double t_,double *in) {
 /** Adds the edge spring forces for the shapeable sheet model.
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_springs(double *in,double *acc,int j) {
+void mesh::accel_springs(double *in,double *acc) {
 
-    int i,is=(nt==1)?0:pld[j],ie=(nt==1)?n:pld[j+1],*ep=eo[is],of=ep-eom,bw=bandwidth()+1;
+    int i,*ep=eo[0],of=ep-eom,bw=bandwidth()+1;
     double *rp=reg+of,*ap,*up;
 
-    if(nt>1) {
-        // Zero the auxiliary arrays.
-        if(j<nt-1) {
-            for(up=pfu[j];up<pfu[j]+3*(ie-is)+bw;up++) *up=0;
-        }
-        else {
-            for(up=pfu[j];up<pfu[j]+3*(ie-is);up++) *up=0;
-        }
-        up=pfu[j]-3*is;
-    }
-    else up=acc;
-    for(i=is;i<ie;i++) while(ep<eo[i+1]) {
-    if(dashpot) damp_force(in,acc,i,*ep,up);
-    stretch_force(in,acc,i,*(ep++),*(rp++),up);
-    }
-    #pragma omp barrier
-
-    if(nt>1) {
-        // Add overlap regions.
-        if(j<nt-1) {
-            for(up=pfu[j]+3*(ie-is),ap=acc+3*ie;up<pfu[j]+3*(ie-is)+bw;up+=3,ap+=3) {
-                *ap+=*up;
-                ap[1]+=up[1];
-                ap[2]+=up[2];
-            }
-        }
-        #pragma omp barrier
-
-        // Add independent portion of forces.
-        for(up=pfu[j],ap=acc+3*is;up<pfu[j]+3*(ie-is);up+=3,ap+=3) {
-            *ap+=*up;
-            ap[1]+=up[1];
-            ap[2]+=up[2];
-        }
+    for(i=0;i<n;i++) while(ep<eo[i+1]) {
+        if(dashpot) damp_force(in,acc,i,*ep,up);
+        stretch_force(in,acc,i,*(ep++),*(rp++),up);
     }
 }
 
 /** Computes the accelerations based on the bending sheet model with random mesh.
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_rbsheet(double *in,double *acc,int j) {
-    int i,is=(nt==1)?0:pld[j],ie=(nt==1)?n:pld[j+1],*ep=eo[is],*tp=to[is],of=ep-eom,bw=bandwidth()+1;
+void mesh::accel_rbsheet(double *in,double *acc) {
+    int i,*ep=eo[0],*tp=to[0],of=ep-eom,bw=bandwidth()+1;
     double *rp=reg+of,*up,*up2,*ap;
 
-    if(nt>1) {
-        // Zero the auxiliary arrays.
-        if((j==0)||(j==nt-1)) {
-            for(up=pfu[j];up<pfu[j]+3*(ie-is)+bw;up++) *up=0;
-        }
-        else {
-            for(up=pfu[j];up<pfu[j]+3*(ie-is)+2*bw;up++) *up=0;
-        }
-
-        if(j==0) up=pfu[j]-3*is;
-        else up=pfu[j]-3*is+bw;
-    }
-    else up=acc;
+    up=acc;
     // first compute the edge forces.
-    for(i=is;i<ie;i++) while(ep<eo[i+1]) {
-    if(dashpot) damp_force(in,acc,i,*ep,up);
-    stretch_force(in,acc,i,*(ep++),*(rp++),up);
+    for(i=0;i<n;i++) while(ep<eo[i+1]) {
+        if(dashpot) damp_force(in,acc,i,*ep,up);
+        stretch_force(in,acc,i,*(ep++),*(rp++),up);
     }
 
     // next add in bending forces.
     of=(tp-tom)/3; rp=ref+of;
-    for(i=is;i<ie;i++) while(tp<to[i+1]) {
+    for(i=0;i<n;i++) while(tp<to[i+1]) {
         bend_force(in,acc,i,*tp,tp[1],tp[2],*(rp++),up);
         tp+=3;
-    }
-    #pragma omp barrier
-
-    if(nt>1) {
-        // Add overlap regions.
-    if(j<nt-1) {
-            if(j==0) {up=pfu[j]+3*(ie-is); up2=pfu[j]+3*(ie-is)+bw;}
-            else {up=pfu[j]+3*(ie-is)+bw; up2=pfu[j]+3*(ie-is)+2*bw;}
-            for(ap=acc+3*ie;up<up2;up+=3,ap+=3) {
-                *ap+=*up;
-                ap[1]+=up[1];
-                ap[2]+=up[2];
-            }
-    }
-        #pragma omp barrier
-
-        if(j>0) {
-            for(up=pfu[j],ap=acc+3*is-bw;up<pfu[j]+bw;up+=3,ap+=3) {
-                *ap+=*up;
-                ap[1]+=up[1];
-                ap[2]+=up[2];
-            }
-        }
-        #pragma omp barrier
-
-        // Add independent portion of forces.
-        if(j==0) {up=pfu[j]; up2=pfu[j]+3*(ie-is);}
-        else {up=pfu[j]+bw; up2=pfu[j]+3*(ie-is)+bw;}
-        for(ap=acc+3*is;up<up2;up+=3,ap+=3) {
-            *ap+=*up;
-            ap[1]+=up[1];
-            ap[2]+=up[2];
-        }
     }
 }
 
@@ -410,7 +321,6 @@ void mesh::accel_rbsheet(double *in,double *acc,int j) {
  * \return The energy. */
 double mesh::energy_springs(double *in) {
     double en=0,*pp,*pp2,*rp=reg,rs,dx,dy,dz;int i,*ep=eom;
-
     for(pp=in,i=0;i<n;i++,pp+=3) while(ep<eo[i+1]) {
 
         // Find the vector to the neighboring vertex
@@ -440,232 +350,6 @@ int mesh::bandwidth() {
     }
     band=3*band+2;
     return band;
-}
-
-/** Computes the Hessian given the current node positions of the mesh.
- * \param[in] h an array of length 3nx3n in which to store the Hessian. */
-void mesh::compute_hessian(double *h) {
-    const int N=3*n;
-    int i,*ep=eom;
-    double *regp=reg,dx,dy,dz,r,r2,r3,
-           xx,yy,zz,xy,xz,yz;
-
-    // Zero the array
-    for(double *hp=h;hp<h+9*n*n;) *(hp++)=0;
-
-    for(i=0;i<n;i++) {
-        while(ep<eo[i+1]) {
-            int e=*ep;
-            dx=pts[3*i]-pts[3*e];
-            dy=pts[3*i+1]-pts[3*e+1];
-            dz=pts[3*i+2]-pts[3*e+2];
-            r=sqrt(dx*dx+dy*dy+dz*dz);
-            r2=r*r; r3=r2*r;
-
-            // Compute all terms relating nodes i and e:
-            xx=(*regp)/r*(dx*dx/r2-1)+1;
-            yy=(*regp)/r*(dy*dy/r2-1)+1;
-            zz=(*regp)/r*(dz*dz/r2-1)+1;
-            xy=(*regp)*dx*dy/r3;
-            xz=(*regp)*dx*dz/r3;
-            yz=(*regp)*dy*dz/r3;
-
-            // Fill the Hessian.
-            // with respect to same node:
-            // same coordinate:
-            h[3*i+N*(3*i)]      +=xx;                       // dx1dx1
-            h[3*i+1+N*(3*i+1)]  +=yy;                       // dy1dy1
-            h[3*i+2+N*(3*i+2)]  +=zz;                       // dz1dz1
-            h[3*e+N*(3*e)]      +=xx;                       // dx2dx2
-            h[3*e+1+N*(3*e+1)]  +=yy;                       // dy2dy2
-            h[3*e+2+N*(3*e+2)]  +=zz;                       // dz2dz2
-
-            // mixed coordinates:
-            h[3*i+1+N*(3*i)]    +=xy;                       // dx1dy1
-            h[3*i+N*(3*i+1)]    +=xy;                       // dy1dx1
-            h[3*e+1+N*(3*e)]    +=xy;                       // dx2dy2
-            h[3*e+N*(3*e+1)]    +=xy;                       // dy2dx2
-
-            h[3*i+2+N*(3*i)]    +=xz;                       // dx1dz1
-            h[3*i+N*(3*i+2)]    +=xz;                       // dz1dx1
-            h[3*e+2+N*(3*e)]    +=xz;                       // dx2dz2
-            h[3*e+N*(3*e+2)]    +=xz;                       // dz2dx2
-
-            h[3*i+1+N*(3*i+2)]  +=yz;                       // dy1dz1
-            h[3*i+2+N*(3*i+1)]  +=yz;                       // dz1dy1
-            h[3*e+1+N*(3*e+2)]  +=yz;                       // dy2dz2
-            h[3*e+2+N*(3*e+1)]  +=yz;                       // dz2dy2
-
-            // with respect to different node:
-            // same coordinate:
-            h[3*i+N*(3*e)]      -=xx;                       // dx1dx2
-            h[3*e+N*(3*i)]      -=xx;                       // dx2dx1
-            h[3*i+1+N*(3*e+1)]  -=yy;                       // dy1dy2
-            h[3*e+1+N*(3*i+1)]  -=yy;                       // dy2dy1
-            h[3*i+2+N*(3*e+2)]  -=zz;                       // dz1dz2
-            h[3*e+2+N*(3*i+2)]  -=zz;                       // dz2dz1
-
-            // mixed coordinates:
-            h[3*e+1+N*(3*i)]    -=xy;                       // dx1dy2
-            h[3*e+N*(3*i+1)]    -=xy;                       // dy1dx2
-            h[3*i+1+N*(3*e)]    -=xy;                       // dx2dy1
-            h[3*i+N*(3*e+1)]    -=xy;                       // dy2dx1
-
-            h[3*e+2+N*(3*i)]    -=xz;                       // dx1dz2
-            h[3*e+N*(3*i+2)]    -=xz;                       // dz1dx2
-            h[3*i+2+N*(3*e)]    -=xz;                       // dx2dz1
-            h[3*i+N*(3*e+2)]    -=xz;                       // dz2dx1
-
-            h[3*e+2+N*(3*i+1)]  -=yz;                       // dy1dz2
-            h[3*e+1+N*(3*i+2)]  -=yz;                       // dz1dy2
-            h[3*i+2+N*(3*e+1)]  -=yz;                       // dy2dz1
-            h[3*i+1+N*(3*e+2)]  -=yz;                       // dz2dy1
-
-            ep++; regp++;
-        }
-    }
-
-    // Scale by K
-    for(double *hp=h;hp<h+9*n*n;) *(hp++)*=K;
-
-    // Contribution from confining potential
-    // TODO: the Hessian contributions from any external potential could be
-    // added here.
-    /*if(crumple) {
-        double fac;
-        for(i=0;i<n;i++) {
-            dx=pts[3*i];
-            dy=pts[3*i+1];
-            dz=pts[3*i+2];
-            r=sqrt(dx*dx+dy*dy+dz*dz);
-            if(r>r_cut) {
-                r2=r*r; fac=C*r_cut/r;
-
-                xx=fac*(dx*dx/r2-1)+1;
-                yy=fac*(dy*dy/r2-1)+1;
-                zz=fac*(dz*dz/r2-1)+1;
-                xy=fac*dx*dy/r2;
-                xz=fac*dx*dz/r2;
-                yz=fac*dy*dz/r2;
-
-                h[3*i+N*(3*i)]      +=xx;                       // dxdx
-                h[3*i+1+N*(3*i+1)]  +=yy;                       // dydy
-                h[3*i+2+N*(3*i+2)]  +=zz;                       // dzdz
-
-                h[3*i+1+N*(3*i)]    +=xy;                       // dxdy
-                h[3*i+N*(3*i+1)]    +=xy;                       // dydx
-                h[3*i+2+N*(3*i)]    +=xz;                       // dxdz
-                h[3*i+N*(3*i+2)]    +=xz;                       // dzdx
-                h[3*i+1+N*(3*i+2)]  +=yz;                       // dydz
-                h[3*i+2+N*(3*i+1)]  +=yz;                       // dzdy
-            }
-        }
-    }*/
-}
-
-/** Computes the Hessian given the current node positions of the mesh, and
- * immediately stores the results in an array prepared for a banded symmetric
- * matrix eigenvalue calculation (matrix AB in LAPACK dsbev function).
- * \param[in] h the array in which to store the result.
- * \param[in] kd the number of superdiagonals to use. */
-void mesh::compute_hessian_banded(double *h,int kd) {
-    const int ldab=(kd+1);
-    int i,j,k,*ep=eom;
-    double *regp=reg,dx,dy,dz,r,r2,r3,
-           xx,yy,zz,xy,xz,yz;
-
-    // Zero the array
-    for(double *hp=h;hp<h+ldab*3*n;) *(hp++)=0;
-
-    for(i=0;i<n;i++) {
-        while(ep<eo[i+1]) {
-            int e=*ep;
-            dx=pts[3*i]-pts[3*e];
-            dy=pts[3*i+1]-pts[3*e+1];
-            dz=pts[3*i+2]-pts[3*e+2];
-            r=sqrt(dx*dx+dy*dy+dz*dz);
-            r2=r*r; r3=r2*r;
-
-            // Compute all terms relating nodes i and e:
-            xx=(*regp)/r*(dx*dx/r2-1)+1;
-            yy=(*regp)/r*(dy*dy/r2-1)+1;
-            zz=(*regp)/r*(dz*dz/r2-1)+1;
-            xy=(*regp)*dx*dy/r3;
-            xz=(*regp)*dx*dz/r3;
-            yz=(*regp)*dy*dz/r3;
-
-            // Fill the Hessian.
-            // with respect to same node:
-            // same coordinate:
-            h[ind(3*i,3*i,ldab,kd)]      +=xx;                       // dx1dx1
-            h[ind(3*i+1,3*i+1,ldab,kd)]  +=yy;                       // dy1dy1
-            h[ind(3*i+2,3*i+2,ldab,kd)]  +=zz;                       // dz1dz1
-            h[ind(3*e,3*e,ldab,kd)]      +=xx;                       // dx2dx2
-            h[ind(3*e+1,3*e+1,ldab,kd)]  +=yy;                       // dy2dy2
-            h[ind(3*e+2,3*e+2,ldab,kd)]  +=zz;                       // dz2dz2
-
-            // mixed coordinates:
-            h[ind(3*i,3*i+1,ldab,kd)]    +=xy;                       // dx1dy1
-            h[ind(3*e,3*e+1,ldab,kd)]    +=xy;                       // dx2dy2
-            h[ind(3*i,3*i+2,ldab,kd)]    +=xz;                       // dx1dz1
-            h[ind(3*e,3*e+2,ldab,kd)]    +=xz;                       // dx2dz2
-            h[ind(3*i+1,3*i+2,ldab,kd)]  +=yz;                       // dy1dz1
-            h[ind(3*e+1,3*e+2,ldab,kd)]  +=yz;                       // dy2dz2
-
-            // with respect to different node:
-            // same coordinate:
-            j=(i<e)?i:e;
-            k=(i<e)?e:i;
-            h[ind(3*j,3*k,ldab,kd)]      -=xx;                       // dx1dx2
-            h[ind(3*j+1,3*k+1,ldab,kd)]  -=yy;                       // dy1dy2
-            h[ind(3*j+2,3*k+2,ldab,kd)]  -=zz;                       // dz1dz2
-
-            // mixed coordinates:
-            h[ind(3*j,3*k+1,ldab,kd)]    -=xy;                       // dx1dy2
-            h[ind(3*j+1,3*k,ldab,kd)]    -=xy;                       // dy1dx2
-
-            h[ind(3*j,3*k+2,ldab,kd)]    -=xz;                       // dx1dz2
-            h[ind(3*j+2,3*k,ldab,kd)]    -=xz;                       // dz1dx2
-
-            h[ind(3*j+1,3*k+2,ldab,kd)]  -=yz;                       // dy1dz2
-            h[ind(3*j+2,3*k+1,ldab,kd)]  -=yz;                       // dz1dy2
-
-            ep++; regp++;
-        }
-    }
-
-    // Scale by K
-    for(double *hp=h;hp<h+ldab*3*n;) *(hp++)*=K;
-
-    // Contribution from confining potential
-    /*if(crumple) {
-        double fac;
-        for(i=0;i<n;i++) {
-            dx=pts[3*i];
-            dy=pts[3*i+1];
-            dz=pts[3*i+2];
-            //r=sqrt(dx*dx+dy*dy+dz*dz);
-            r=sqrt(dx*dx+dy*dy); // xy radial only
-        if(r>r_cut) {
-                r2=r*r; fac=C*r_cut/r;
-
-                xx=fac*(dx*dx/r2-1)+1;
-                yy=fac*(dy*dy/r2-1)+1;
-                zz=fac*(dz*dz/r2-1)+1;
-                xy=fac*dx*dy/r2;
-                xz=fac*dx*dz/r2;
-                yz=fac*dy*dz/r2;
-
-                h[ind(3*i,3*i,ldab,kd)]      +=xx;                       // dxdx
-                h[ind(3*i+1,3*i+1,ldab,kd)]  +=yy;                       // dydy
-                //h[ind(3*i+2,3*i+2,ldab,kd)]  +=zz;                       // dzdz
-
-                h[ind(3*i,3*i+1,ldab,kd)]    +=xy;                       // dxdy
-                //h[ind(3*i,3*i+2,ldab,kd)]    +=xz;                       // dxdz
-                //h[ind(3*i+1,3*i+2,ldab,kd)]  +=yz;                       // dydz
-            }
-        }
-    }*/
 }
 
 /** Centralizes the mesh, and calculates its square width in each of the three
@@ -940,7 +624,6 @@ void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef,d
     a1.add(acc2+3*j);
     a2.add(acc2+3*k);
     a3.add(acc2+3*l);
-
 }
 
 /** Adds an external potential to the class.

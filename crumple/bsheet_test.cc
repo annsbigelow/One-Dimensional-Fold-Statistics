@@ -34,7 +34,7 @@ int main() {
 
     // Carry out the simulation, reporting the time to compute the timesteps
     // between each output frame
-    mp.solve(mp.pts,0,500000,5,51); // this is equivalent to running section below:
+    mp.solve_adaptive(1,1e-4,1e-4,false,101); // this is equivalent to running section below:
     /*
     mp.output_positions(0);
     puts("Frame 0");

@@ -62,7 +62,7 @@ class mesh : public mesh_param {
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
-        void mesh_ff(double t_,double *in,double *out,int j);
+        void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
         void centralize(double &wx,double &wy,double &wz);
         void read_topology(FILE *fp);
@@ -71,20 +71,16 @@ class mesh : public mesh_param {
         void mesh_setup_threads(int nt_);
         void perturb_springs(double min_fac,double max_fac);
         void reset_relaxed();
-        void acceleration(double t_,double *in,double *acc,int j);
-        void accel_springs(double *in,double *acc,int j);
+        void acceleration(double t_,double *in,double *acc);
+        void accel_springs(double *in,double *acc);
         void accel_bsheet(double *in,double *acc);
-        void accel_rbsheet(double *in,double *acc,int j);
+        void accel_rbsheet(double *in,double *acc);
         double energy(double t_,double *in);
         double energy_springs(double *in);
         double energy_bsheet(double *in);
         int bandwidth();
-        void compute_hessian(double *h);
-        void compute_hessian_banded(double *h,int kd);
         void add(ext_potential *ep);
-        void build_tree(bool reset=false);
-            void update_tree(double *in,int j);
-        void accel_repulsive(double *in,double *acc,int j);
+        //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
             FILE *fp=safe_fopen(filename,"w");
@@ -150,7 +146,7 @@ class mesh : public mesh_param {
         }
         inline void dfun(double *in,double *out) {
             for(int i=0;i<3*n;i++) out[i]=0.;
-            acceleration(fzt,in,out,0);
+            acceleration(fzt,in,out);
             for(int i=0;i<3*n;i++) out[i]=-out[i];
         }
     private:
@@ -197,21 +193,9 @@ class mesh_rk4 : public mesh, public rk4 {
     public:
         mesh_rk4(mesh_param &mp,const char* filename) : mesh(mp,filename), rk4() {}
         mesh_rk4(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), rk4() {}
-        virtual void ff(double t_,double *in,double *out,int j) {mesh_ff(t_,in,out,j);}
+        virtual void ff(double t_,double *in,double *out) {mesh_ff(t_,in,out);}
         virtual void init(double *q) {mesh_init();}
         virtual void output(int l) {output_positions(l); output_velocities(l);}
-        virtual void setup_threads(int nt_) {mesh_setup_threads(nt_);}
-};
-
-/** Class to set up a mesh with the RK-FSAL adaptive integrator. */
-class mesh_rkfsal : public mesh, public rkfsal {
-    public:
-        mesh_rkfsal(mesh_param &mp,const char* filename) : mesh(mp,filename), rkfsal() {}
-        mesh_rkfsal(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), rkfsal() {}
-        virtual void ff(double t_,double *in,double *out,int j) {mesh_ff(t_,in,out,j);}
-        virtual void init(double *q) {mesh_init();}
-        virtual void output(int l) {output_positions(l); output_velocities(l);}
-        virtual void setup_threads(int nt_) {mesh_setup_threads(nt_);}
 };
 
 #endif
