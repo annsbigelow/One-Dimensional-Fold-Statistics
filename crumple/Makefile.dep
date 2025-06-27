@@ -1,0 +1,7 @@
+rk4.o: rk4.cc rk4.hh
+mesh.o: mesh.cc mesh.hh common.hh rk4.hh mesh_param.hh ext_potential.hh
+mesh_en.o: mesh_en.cc mesh.hh common.hh rk4.hh mesh_param.hh \
+ ext_potential.hh
+mesh_io.o: mesh_io.cc mesh.hh common.hh rk4.hh mesh_param.hh \
+ ext_potential.hh
+common.o: common.cc common.hh

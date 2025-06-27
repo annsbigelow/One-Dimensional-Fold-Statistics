@@ -1,0 +1,180 @@
+#ifndef EXT_POTENTIAL_HH
+#define EXT_POTENTIAL_HH
+
+class ext_potential {
+    public:
+        ext_potential() {}
+        virtual ~ext_potential() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc) = 0;
+        virtual double energy(double t,int n,double *in) = 0;
+};
+
+class ep_centering : public ext_potential {
+    public:
+        /** Strength of the centering force. */
+        const double cforce;
+        ep_centering(double cforce_) : cforce(cforce_) {}
+        virtual ~ep_centering() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+};
+
+class ep_quadratic : public ext_potential {
+    public:
+        /** Rate at which the quadratic potential increases. */
+        const double lambda;
+        ep_quadratic(double lambda_) : lambda(lambda_) {}
+        virtual ~ep_quadratic() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+};
+
+class ep_spherical : public ext_potential {
+    public:
+        /** Cutoff radius for radial quadratic potential. */
+        double r_cut;
+        /** Cutoff radius squared. */
+        double r_cut2;
+        /** Strength of potential. */
+        double C;
+        /** The class constructor for the case when the parameters are not
+         * initialized ahead of time. */
+        ep_spherical() {}
+        /** The class constructor when parameters can be initialized right
+         * away. */
+        ep_spherical(double r_cut_,double C_) : r_cut(r_cut_),
+            r_cut2(r_cut*r_cut), C(C_) {}
+        virtual ~ep_spherical() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+	virtual double energy(double t,int n,double *in);
+        void set_params(double r_cut_,double C_);
+};
+
+class ep_piston : public ext_potential {
+    public:
+        /** The radius of the piston. */
+        double r_piston;
+        /** The radius of the piston squared. */
+        double r_piston2;
+        /** The z coordinate of the piston top. */
+        double z_top;
+        /** The z coordinate of the piston bottom (symmetric about xy plane). */
+        double z_bot;
+        /** The small contact region for compression. */
+        double delta;
+        /** The frequency of compression. */
+        double freq;
+        /** The class constructor for the case when the piston parameters
+         * are not known ahead of time. */
+        ep_piston() {}
+        /** The class constructor when the piston parameters are known. */
+        ep_piston(double r_piston_,double z_piston,double delta_,double freq_) :
+            r_piston(r_piston_), r_piston2(r_piston*r_piston), z_top(z_piston),
+            z_bot(-z_piston), delta(delta_), freq(freq_) {}
+        virtual ~ep_piston() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+        void set_params(double r_piston_,double z_piston_,double delta_,double freq_);
+};
+
+class ep_axial : public ext_potential {
+    public:
+        /** The radius of the piston. */
+        double r_piston;
+        /** The radius of the piston squared. */
+        double r_piston2;
+        /** The z coordinate of the piston top. */
+        double z_top;
+        /** The z coordinate of the piston bottom (symmetric about xy plane). */
+        double z_bot;
+        /** Time over which piston compresses by z_top. */
+        double tf;
+        /** Magnitude of initial velocity of piston, moving in -z direction. */
+        double vz;
+        /** Constant acceleration of the piston. */
+        double az;
+        /** The class constructor for the case when the parameters are not
+         * initialized ahead of time. */
+        ep_axial() {}
+        /** The class constructor when parameters can be initialized right
+         * away. */
+        ep_axial(double r_piston_,double z_piston,double tf_) :
+            r_piston(r_piston_), r_piston2(r_piston*r_piston), z_top(z_piston),
+            z_bot(-z_piston), tf(tf_), vz(2*z_top/tf), az(vz/tf) {}
+        virtual ~ep_axial() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+        void set_params(double r_piston_,double z_piston,double tf_);
+};
+
+class ep_spherical_drift : public ext_potential {
+    public:
+        /** Cutoff radius for radial quadratic potential. */
+        double r_cut;
+        /** Cutoff radius squared. */
+        double r_cut2;
+        /** Strength of potential. */
+        double C;
+        /** Distance to translate sphere center in -z. */
+	double dz;
+	/** Time over which sphere drifts a distance dz. */
+        double tf;
+	/** Magnitude of initial velocity of sphere center, moving in -z direction. */
+        double vz;
+        /** Constant acceleration of the sphere. */
+        double az;
+        /** The class constructor for the case when the parameters are not
+         * initialized ahead of time. */
+        ep_spherical_drift() {}
+        /** The class constructor when parameters can be initialized right
+         * away. */
+        ep_spherical_drift(double r_cut_,double C_,double dz_,double tf_) : r_cut(r_cut_),
+             r_cut2(r_cut*r_cut), C(C_), dz(dz_), tf(tf_), vz(2*r_cut/tf),  az(vz/tf) {}
+        virtual ~ep_spherical_drift() {}
+	virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+        void set_params(double r_cut_,double C_,double dz_,double tf_);
+};
+
+class ep_tensilex : public ext_potential {
+    public:
+        /** Constant stretch velocity. */
+        const double gamma;
+	/** Sign of velocity by node. */
+	int *grip;
+        ep_tensilex(double gamma_,int *grip_) : gamma(gamma_), grip(grip_) {}
+        virtual ~ep_tensilex() {}
+        virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+};
+
+class ep_tensiley : public ext_potential {
+    public:
+	/** Constant stretch velocity. */
+        const double gamma;
+        /** Sign of velocity by node. */
+        int *grip;
+	ep_tensiley(double gamma_,int *grip_) : gamma(gamma_), grip(grip_) {}
+        virtual ~ep_tensiley() {}
+        virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+};
+
+class ep_shell : public ext_potential {
+    public:
+        /** Constant velocity at which shell radius decreases. */
+        const double gamma;
+        /** Strength of potential. */
+        const double C;
+        /** Initial radius of the shell. */
+        double r0;
+        /** Initial time. */
+        double t0;
+        ep_shell(double gamma_,double C_) : gamma(gamma_), C(C_) {}
+        virtual ~ep_shell() {}
+        virtual void accel(double t,int n,int is,int ie,double *in,double *acc);
+        virtual double energy(double t,int n,double *in);
+        void set_params(double r_,double t_);
+};
+
+#endif
