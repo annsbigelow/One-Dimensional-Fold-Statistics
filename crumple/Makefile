@@ -4,7 +4,7 @@ include ../config.mk
 # Lists of files to be built
 objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o
 src=$(patsubst %.o,%.cc,$(objs) $(mg_objs))
-execs=ode_test ode_conv unpack virt sph_gen sheet_gen mesh_conv ssheet_test bsheet_test
+execs=ode_test ode_conv virt sheet_gen # sph_gen mesh_conv ssheet_test bsheet_test
 
 all: $(execs)
 
@@ -26,10 +26,10 @@ libcrump.a: $(objs)
 %.o: %.cc
 	$(cxx) $(cflags) $(voropp_iflags) -c $<
 
-ode_test: ode_test.cc sol_adapt.o sol_fsal.o
+ode_test: ode_test.cc rk4.o osc.hh
 	$(cxx) $(cflags) -o $@ $^
 
-ode_conv: ode_conv.cc sol_adapt.o sol_fsal.o
+ode_conv: ode_conv.cc rk4.o brusselator.hh
 	$(cxx) $(cflags) -o $@ $^
 
 virt: virt.cc
