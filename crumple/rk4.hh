@@ -49,7 +49,7 @@ class rk4 {
         void fixed_step(double dt);
         double step_and_error(double dt,double atol,double rtol);
         virtual void print_step();
-        virtual void print_dense(double t_,double *in);
+        virtual void print_dense(int fr,double t_,double *in);
         virtual void ff(double t_,double *in,double *out) = 0;
     private:
         double scaled_norm(double *in,double atol,double rtol);

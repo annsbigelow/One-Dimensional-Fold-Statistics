@@ -64,11 +64,11 @@ class mesh : public mesh_param {
         virtual ~mesh();
         void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
+        void mesh_print_dense(int fr,double t_,double *in);
         void centralize(double &wx,double &wy,double &wz);
         void read_topology(FILE *fp);
         void read_positions(FILE *fp);
         void setup_springs();
-        void mesh_setup_threads(int nt_);
         void perturb_springs(double min_fac,double max_fac);
         void reset_relaxed();
         void acceleration(double t_,double *in,double *acc);
@@ -154,12 +154,6 @@ class mesh : public mesh_param {
         char *odir;
         /** The buffer for assembling output filenames, if present. */
         char *obuf;
-        /** The number of threads to use. */
-        int nt;
-        /** Memory for parallel force updates. */
-        double **pfu;
-        /** Load allocation for different threads. */
-        int *pld;
         /** "Frozen" time point, needed when halting simulation to perform
         derivative checks or energy minimization. */
         double fzt;
@@ -168,13 +162,13 @@ class mesh : public mesh_param {
         int edge_mark(int i,int *edp);
         void cyl_print(FILE *fp,double *p,double *q);
         void edge_force(double *in,double *acc,int i,int k);
-        void stretch_force(double *in,double *acc,int i,int k,double sf,double *acc2);
-        void damp_force(double *in,double *acc,int i,int k,double *acc2);
+        void stretch_force(double *in,double *acc,int i,int k,double sf);
+        void damp_force(double *in,double *acc,int i,int k);
         double edge_energy(double *in,int i,int k);
         void triangle_force(double *in,double *acc,int i,int j,int k,int l);
         double triangle_energy(double *in,int i,int j,int k,int l);
         double edge_factor(double *in,int i,int j,int k,int l);
-        void bend_force(double *in,double *acc,int i,int j,int k,int l,double ef,double *acc2);
+        void bend_force(double *in,double *acc,int i,int j,int k,int l,double ef);
         void repulsive_force(double *in,double *acc,int i,int k);
         void min_message(int &piter,int iter,gsl_multimin_fdfminimizer *s,double &t0);
         inline bool find_unmarked(int j,int *&p) {
@@ -195,7 +189,7 @@ class mesh_rk4 : public mesh, public rk4 {
         mesh_rk4(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), rk4() {}
         virtual void ff(double t_,double *in,double *out) {mesh_ff(t_,in,out);}
         virtual void init(double *q) {mesh_init();}
-        virtual void output(int l) {output_positions(l); output_velocities(l);}
+        virtual void print_dense(int fr,double t_,double *in) {mesh_print_dense(fr,t_,in);}
 };
 
 #endif

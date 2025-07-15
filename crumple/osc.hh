@@ -26,7 +26,7 @@ class osc_rk4 : public rk4 {
         virtual void print_step() {
             printf("%g %g %g %g %g\n",t,*q,q[1],*q-sol0(t),q[1]-sol1(t));
         }
-        virtual void print_dense(double t_,double *in) {
+        virtual void print_dense(int fr,double t_,double *in) {
             printf("%g %g %g %g %g\n",t_,*in,in[1],*in-sol0(t_),in[1]-sol1(t_));
         }
         inline double sol0(double t) {return cos(0.5*t*t);}

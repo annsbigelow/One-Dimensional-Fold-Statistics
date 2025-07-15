@@ -6,7 +6,7 @@
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
-    n_ep(0), reg(NULL), odir(NULL), nt(1) {
+    n_ep(0), reg(NULL), odir(NULL) {
     FILE *fp=safe_fopen(filename,"rb");
     read_topology(fp);
     read_positions(fp);
@@ -19,7 +19,7 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
  * \param[in] f_topo the file to read the mesh topology from.
  * \param[in] f_pts the file to read the vertex positions from. */
 mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
-    mesh_param(mp), n_ep(0), reg(NULL), odir(NULL), nt(1) {
+    mesh_param(mp), n_ep(0), reg(NULL), odir(NULL) {
 
     // Read in the mesh topology
     FILE *fp=safe_fopen(f_topo,"rb");
@@ -35,13 +35,6 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
 /** The class destructor frees the dynamically allocated memory. */
 mesh::~mesh() {
     if(odir!=NULL) delete [] odir;
-    if(nt>1) {
-        for(int j=nt-1;j>=0;j--) {
-            delete [] pfu[j];
-        }
-        delete [] pfu;
-        delete [] pld;
-    }
     if(reg!=NULL) {
     if(bsheet_model) {delete [] ref; delete [] tom; delete [] to;}
     delete [] reg; delete [] eom; delete [] eo;
@@ -89,6 +82,7 @@ void mesh::setup_springs() {
     sigma=emax;
 
     if(bsheet_model) {
+
         // Set up relaxed areas of triangles joined by a "hinge" edge.
         // Determine number of "hinges" by subtracting boundary edges from total.
         int nb=0,j,j2,k,ct=0;
@@ -99,6 +93,7 @@ void mesh::setup_springs() {
         to=new int*[n+1];
         tom=new int[3*nh];
         ref=new double[nh];
+
         // Set up relaxed triangle areas as sums of triangle pairs
         int *top=tom;
         regp=ref; edp=*ed;
@@ -110,13 +105,16 @@ void mesh::setup_springs() {
                 j=*(edp++);
                 if(edp<ed[i+1]) {
                     j2=*edp;
+
                     // Loop over the other vertices
                     while(edp+1<ed[i+1]) {
                         k=*(edp++);
                         if(i<k) {
                             *(regp++)=edge_factor(pts,i,edp[-2],k,*edp);
-                            *(top++)=edp[-2]; *(top++)=k; *(top++)=*edp;
-                ct++;
+                            *(top++)=edp[-2];
+                            *(top++)=k;
+                            *(top++)=*edp;
+                            ct++;
                         }
                     }
                     k=*edp;
@@ -125,15 +123,19 @@ void mesh::setup_springs() {
                     // vertex
                     if((ncn[i]&bflag)==0) {
                         if(i<k) {
-                *(regp++)=edge_factor(pts,i,edp[-1],k,j);
-                *(top++)=edp[-1]; *(top++)=k; *(top++)=j;
-                ct++;
-                }
+                            *(regp++)=edge_factor(pts,i,edp[-1],k,j);
+                            *(top++)=edp[-1];
+                            *(top++)=k;
+                            *(top++)=j;
+                            ct++;
+                        }
                         if(i<j) {
-                *(regp++)=edge_factor(pts,i,k,j,j2);
-                *(top++)=k; *(top++)=j; *(top++)=j2;
-                ct++;
-                }
+                            *(regp++)=edge_factor(pts,i,k,j,j2);
+                            *(top++)=k;
+                            *(top++)=j;
+                            *(top++)=j2;
+                            ct++;
+                        }
                     }
                     edp++;
                 }
@@ -141,38 +143,6 @@ void mesh::setup_springs() {
         }
         to[n]=top;
         printf("%d %d\n",nh,ct);
-    }
-}
-
-void mesh::mesh_setup_threads(int nt_) {
-    nt=nt_; // specify number of threads.
-    int load=n/nt;
-    pld=new int[nt+1];
-    for(int i=0;i<nt;i++) pld[i]=load*i;
-    pld[nt]=n;
-    int bw=bandwidth()+1;
-    for(int i=0;i<nt;i++) {
-        if(3*(pld[i+1]-pld[i])<bw) {
-            fputs("Overlap region not thread safe; change to atomic.\n",stderr);
-            exit(1);
-        }
-    }
-    pfu=new double*[nt];
-    if(bsheet_model) { // requires padding auxiliary arrays by a bandwidth on both sides
-        #pragma omp parallel num_threads(nt)
-        {
-        int j=omp_get_thread_num();
-            if((j==0)||(j==nt-1)) pfu[j]=new double[3*(pld[j+1]-pld[j])+bw];
-            else pfu[j]=new double[3*(pld[j+1]-pld[j])+2*bw];
-        }
-    }
-    else { // pad auxiliary arrays by a bandwidth only for i>j
-        #pragma omp parallel num_threads(nt)
-        {
-        int j=omp_get_thread_num();
-            if(j<nt-1) pfu[j]=new double[3*(pld[j+1]-pld[j])+bw];
-            else pfu[j]=new double[3*(pld[j+1]-pld[j])];
-        }
     }
 }
 
@@ -191,10 +161,10 @@ void mesh::perturb_springs(double min_fac,double max_fac) {
         // Randomly perturb all edges except those between boundary nodes, if boundary fixed
         if(fix_boundary&&(*np&bflag)&&(*np2&bflag)) rp++;
         else {
-        *rp*=min_fac+static_cast<double>(rand())*rfac;
-        if(*rp>emax) emax=*rp;
+            *rp*=min_fac+static_cast<double>(rand())*rfac;
+            if(*rp>emax) emax=*rp;
             rp++;
-    }
+        }
     }
     sigma=emax;
 }
@@ -207,7 +177,7 @@ void mesh::reset_relaxed() {
         dy=pts[3*i+1]-pts[3*(*ep)+1];
         dz=pts[3*i+2]-pts[3*(*(ep++))+2];
         *rp=sqrt(dx*dx+dy*dy+dz*dz);
-    if(*rp>emax) emax=*rp;
+        if(*rp>emax) emax=*rp;
         rp++;
     }
     sigma=emax;
@@ -224,6 +194,7 @@ void mesh::reset_relaxed() {
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
+    printf("%g\n",t_);
 
     // Compute drag
     for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
@@ -284,12 +255,12 @@ double mesh::energy(double t_,double *in) {
  * \param[in] acc the mesh point accelerations (cumulative). */
 void mesh::accel_springs(double *in,double *acc) {
 
-    int i,*ep=eo[0],of=ep-eom,bw=bandwidth()+1;
-    double *rp=reg+of,*ap,*up;
+    int i,*ep=eo[0],of=ep-eom;
+    double *rp=reg+of;
 
     for(i=0;i<n;i++) while(ep<eo[i+1]) {
-        if(dashpot) damp_force(in,acc,i,*ep,up);
-        stretch_force(in,acc,i,*(ep++),*(rp++),up);
+        if(dashpot) damp_force(in,acc,i,*ep);
+        stretch_force(in,acc,i,*(ep++),*(rp++));
     }
 }
 
@@ -297,20 +268,19 @@ void mesh::accel_springs(double *in,double *acc) {
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
 void mesh::accel_rbsheet(double *in,double *acc) {
-    int i,*ep=eo[0],*tp=to[0],of=ep-eom,bw=bandwidth()+1;
-    double *rp=reg+of,*up,*up2,*ap;
+    int i,*ep=eo[0],*tp=to[0],of=ep-eom;
+    double *rp=reg+of;
 
-    up=acc;
     // first compute the edge forces.
     for(i=0;i<n;i++) while(ep<eo[i+1]) {
-        if(dashpot) damp_force(in,acc,i,*ep,up);
-        stretch_force(in,acc,i,*(ep++),*(rp++),up);
+        if(dashpot) damp_force(in,acc,i,*ep);
+        stretch_force(in,acc,i,*(ep++),*(rp++));
     }
 
     // next add in bending forces.
     of=(tp-tom)/3; rp=ref+of;
     for(i=0;i<n;i++) while(tp<to[i+1]) {
-        bend_force(in,acc,i,*tp,tp[1],tp[2],*(rp++),up);
+        bend_force(in,acc,i,*tp,tp[1],tp[2],*(rp++));
         tp+=3;
     }
 }
@@ -346,7 +316,7 @@ int mesh::bandwidth() {
             e=*ep;
             if((e-i)>band) band=e-i;
             ep++;
-    }
+        }
     }
     band=3*band+2;
     return band;
@@ -540,12 +510,13 @@ double mesh::edge_factor(double *in,int i,int j,int k,int l) {
     // Compute normals to the triangles
     n1=e0*e1;
     n2=-e0*e2;
+
     // Return the ratio of the hinge length squared to sum of adjacent triangle areas.
     return 2*mod_sq(e0)/(sqrt(mod_sq(n1))+sqrt(mod_sq(n2)));
 }
 
-void mesh::stretch_force(double *in,double *acc,int i,int k,double sf,double *acc2) {
-    double *ii=in+3*i,*ik=in+3*k,*ai=acc+3*i,*ak=acc2+3*k,
+void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
+    double *ii=in+3*i,*ik=in+3*k,*ai=acc+3*i,*ak=acc+3*k,
            dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2],
            rs=sf/sqrt(dx*dx+dy*dy+dz*dz)-1;
 
@@ -555,8 +526,8 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf,double *ac
     *ak-=dx;ak[1]-=dy;ak[2]-=dz;
 }
 
-void mesh::damp_force(double *in,double *acc,int i,int k,double *acc2) {
-    double *ii=in+3*(i+n),*ik=in+3*(k+n),*ai=acc+3*i,*ak=acc2+3*k,
+void mesh::damp_force(double *in,double *acc,int i,int k) {
+    double *ii=in+3*(i+n),*ik=in+3*(k+n),*ai=acc+3*i,*ak=acc+3*k,
            dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2];
 
     // Add the force contributions to the two vertices
@@ -570,25 +541,18 @@ void mesh::repulsive_force(double *in,double *acc,int i,int k) {
            r=sqrt(dx*dx+dy*dy+dz*dz);
 
     if(r<sigma) {
-    //printf("%d %d %.4f %.4f\n",i,k,r,sigma);
-    //double rs=sigma/r-1; // linear spring
-    double xinv=sigma/(r-sigma),rs=exp(xinv)*xinv*xinv*(sigma/r); // differentiable test function
+        //printf("%d %d %.4f %.4f\n",i,k,r,sigma);
+        //double rs=sigma/r-1; // linear spring
+        double xinv=sigma/(r-sigma),rs=exp(xinv)*xinv*xinv*(sigma/r); // differentiable test function
 
-    // Add the force contributions to the two vertices
-    dx*=rs*K;dy*=rs*K;dz*=rs*K;
-    // Currently, each thread accumulates forces only for its own assigned nodes.
-    //#pragma omp atomic
+        // Add the force contributions to the two vertices
+        dx*=rs*K;dy*=rs*K;dz*=rs*K;
         *ai+=dx;
-    //#pragma omp atomic
-    ai[1]+=dy;
-    //#pragma omp atomic
-    ai[2]+=dz;
-        /*#pragma omp atomic
+        ai[1]+=dy;
+        ai[2]+=dz;
         *ak-=dx;
-        #pragma omp atomic
         ak[1]-=dy;
-        #pragma omp atomic
-        ak[2]-=dz;*/
+        ak[2]-=dz;
     }
 }
 
@@ -597,7 +561,7 @@ void mesh::repulsive_force(double *in,double *acc,int i,int k) {
  * \param[in] in the mesh point positions.
  * \param[in] (i,j,k,l) the four vertices defining the two triangles.
  * \return The energy. */
-void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef,double *acc2) {
+void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef) {
     double *ii=in+3*i,*ij=in+3*j,*ik=in+3*k,*il=in+3*l,ne,nf,sp,fac;
     vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
          c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
@@ -621,9 +585,9 @@ void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef,d
     // obtain it by subtracting the other three.
     a0=-a1-a2-a3;
     a0.add(acc+3*i);
-    a1.add(acc2+3*j);
-    a2.add(acc2+3*k);
-    a3.add(acc2+3*l);
+    a1.add(acc+3*j);
+    a2.add(acc+3*k);
+    a3.add(acc+3*l);
 }
 
 /** Adds an external potential to the class.

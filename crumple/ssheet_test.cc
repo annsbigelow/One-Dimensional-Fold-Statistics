@@ -7,10 +7,10 @@
 int main() {
 
     // Read in the mesh
-    int len=201;
+    int len=101;
     int inc=20;
     char buf[128];
-    sprintf(buf,"sheet_%dx%d.bin",len,len);
+    sprintf(buf,"sh48_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
     mesh_param par(0.05,0.02,0.005,false,false);
     mesh_rk4 mp(par,buf); // use an RK4 integrator

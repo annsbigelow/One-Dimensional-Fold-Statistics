@@ -80,13 +80,12 @@ void rk4::fixed_step(double dt) {
 
 /** Prints the current state of the solution. */
 void rk4::print_step() {
-    //printf("%g",t);
     for(int i=0;i<dof;i++) printf(" %g",q[i]);
     puts("");
 }
 
 /** Prints the current state of the solution. */
-void rk4::print_dense(double t_,double *in) {
+void rk4::print_dense(int fr,double t_,double *in) {
     for(int i=0;i<dof;i++) printf(" %g",in[i]);
     puts("");
 }
@@ -114,7 +113,7 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
     // Do any required output of the initial step
     if(output) print_step();
     if(d_steps>0) {
-        print_dense(t,q);
+        print_dense(0,t,q);
     }
 
     num_acc=0,num_tot=0;
@@ -135,7 +134,7 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
                     do_count++;
                     t_den=t_start+do_count*sf;
                     dense_output(1.+(t_den-t)/dt,dt);
-                    print_dense(t_start+do_count*sf,k3);
+                    print_dense(do_count,t_start+do_count*sf,k3);
 
                     num_acc=num_tot=0;
                 }
@@ -149,7 +148,7 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
             if(output) print_step();
             if(last) {
                 if(d_steps>0) {
-                    do_count++;print_dense(t_final,q);
+                    do_count++;print_dense(do_count,t_final,q);
                     num_acc=num_tot=0;
                 }
                 return;

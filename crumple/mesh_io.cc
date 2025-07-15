@@ -231,6 +231,14 @@ void mesh::output_topology(FILE *fp) {
     fwrite(edm,sizeof(int),nc,fp);
 }
 
+void mesh::mesh_print_dense(int fr,double t_,double *in) {
+    printf("# Output frame %d (t=%g)\n",fr,t_);
+    sprintf(obuf,"%s/pts.%d",odir,fr);
+    FILE *fp=safe_fopen(obuf,"wb");
+    fwrite(in,sizeof(double),3*n,fp);
+    fclose(fp);
+}
+
 /** Outputs the mesh vertex positions.
  * \param[in] fp a file handle to write to. */
 void mesh::output_positions(FILE *fp) {
