@@ -18,8 +18,8 @@ rk4::rk4(int dof_) : dof(dof_), fcount(0), num_acc(0), num_tot(0),
 rk4::rk4() : dof(0), fcount(0), num_acc(0), num_tot(0), t(0.) {}
 
 /** Allocates memory for the solution and intermediate steps. */
-void rk4::allocate() {
-    q=new double[dof];
+void rk4::allocate(double *q_) {
+    q=q_;
     dq=new double[dof];
     k1=new double[dof];
     k2=new double[dof];
@@ -34,7 +34,6 @@ rk4::~rk4() {
     delete [] k2;
     delete [] k1;
     delete [] dq;
-    delete [] q;
 }
 
 /** Solves the ODE problem with a fixed integration step.

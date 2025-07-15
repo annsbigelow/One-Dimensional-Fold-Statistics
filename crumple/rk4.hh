@@ -36,11 +36,11 @@ class rk4 {
         rk4(int dof_);
         rk4();
         virtual ~rk4();
-        void allocate();
+        void allocate(double *q_);
         /** Allocates memory for the solution and intermediate steps. */
-        inline void allocate(int dof_) {
+        inline void allocate(int dof_,double *q_) {
             dof=dof_;
-            allocate();
+            allocate(q_);
         }
         void solve_fixed(double duration,int iters,bool output=false);
         void solve_adaptive(double duration,double atol,double rtol,bool output=false,int d_steps=0);
