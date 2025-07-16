@@ -9,13 +9,15 @@
  * allocates memory for the solution and intermediate steps.
  * \param[in] dof_ the number of degrees of freedom. */
 rk4::rk4(int dof_) : dof(dof_), fcount(0), num_acc(0), num_tot(0),
-    t(0.), q(new double[dof]), dq(new double[dof]), k1(new double[dof]),
-    k2(new double[dof]), k3(new double[dof]), k4(new double[dof]) {}
+    i_alloc(true), t(0.), q(new double[dof]), dq(new double[dof]),
+    k1(new double[dof]), k2(new double[dof]), k3(new double[dof]),
+    k4(new double[dof]) {}
 
 /** This alternative class constructor is used for cases where the number of
  * degrees of freedom is not known ahead of time. In this case, no memory is
  * allocated. */
-rk4::rk4() : dof(0), fcount(0), num_acc(0), num_tot(0), t(0.) {}
+rk4::rk4() : dof(0), fcount(0), num_acc(0), num_tot(0), i_alloc(false),
+    t(0.) {}
 
 /** Allocates memory for the solution and intermediate steps. */
 void rk4::allocate(double *q_) {
@@ -34,6 +36,7 @@ rk4::~rk4() {
     delete [] k2;
     delete [] k1;
     delete [] dq;
+    if(i_alloc) delete [] q;
 }
 
 /** Solves the ODE problem with a fixed integration step.

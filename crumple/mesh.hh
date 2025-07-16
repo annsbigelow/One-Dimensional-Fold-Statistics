@@ -185,8 +185,12 @@ class mesh : public mesh_param {
 /** Class to set up a mesh with the RK4 integrator. */
 class mesh_rk4 : public mesh, public rk4 {
     public:
-        mesh_rk4(mesh_param &mp,const char* filename) : mesh(mp,filename), rk4() {}
-        mesh_rk4(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), rk4() {}
+        mesh_rk4(mesh_param &mp,const char* filename) : mesh(mp,filename), rk4() {
+            allocate(6*n,pts);
+        }
+        mesh_rk4(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), rk4() {
+            allocate(6*n,pts);
+        }
         virtual void ff(double t_,double *in,double *out) {mesh_ff(t_,in,out);}
         virtual void init(double *q) {mesh_init();}
         virtual void print_dense(int fr,double t_,double *in) {mesh_print_dense(fr,t_,in);}

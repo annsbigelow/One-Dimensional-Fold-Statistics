@@ -91,11 +91,11 @@ void ep_spherical::set_params(double r_cut_,double C_) {
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
 void ep_spherical::accel(double t,int n,double *in,double *acc) { // In parallel
-    double rsq,fac,*pp,*ap;
+    double rsq,fac,*pp,*ap,rc=r_cut-t*0.1,rc2=rc*rc;
     for(pp=in,ap=acc;ap<acc+3*n;pp+=3,ap+=3) {
         rsq=(*pp)*(*pp)+pp[1]*pp[1]+pp[2]*pp[2];
-        if(rsq>r_cut2) {
-            fac=C*(1-r_cut/sqrt(rsq));
+        if(rsq>rc2) {
+            fac=C*(1-rc/sqrt(rsq));
             *ap-=fac*(*pp); ap[1]-=fac*pp[1]; ap[2]-=fac*pp[2];
         }
     }

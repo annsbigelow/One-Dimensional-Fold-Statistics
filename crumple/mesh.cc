@@ -194,7 +194,6 @@ void mesh::reset_relaxed() {
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
-    printf("%g\n",t_);
 
     // Compute drag
     for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;

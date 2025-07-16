@@ -24,6 +24,8 @@ class rk4 {
         int num_acc;
         /** The counter of total timesteps between dense outputs. */
         int num_tot;
+        /** Whether the class allocated its own memory for the solution vector. */
+        bool i_alloc;
         /** The current time. */
         double t;
         /** The solution vector. */
@@ -41,6 +43,11 @@ class rk4 {
         inline void allocate(int dof_,double *q_) {
             dof=dof_;
             allocate(q_);
+        }
+        inline void allocate(int dof_) {
+            dof=dof_;
+            i_alloc=true;
+            allocate(new double[dof]);
         }
         void solve_fixed(double duration,int iters,bool output=false);
         void solve_adaptive(double duration,double atol,double rtol,bool output=false,int d_steps=0);

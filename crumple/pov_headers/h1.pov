@@ -1,4 +1,4 @@
-// W=1024 H=768
+// W=1280 H=768
 // Chris's example
 #version 3.6;
 
@@ -7,10 +7,10 @@ global_settings {
 }
 
 camera {
-	location <5,-27,13>
+	location <100,-540,260>
 	sky z
-	right -0.072*x*image_width/image_height
-	up 0.072*z
+	right -0.18*x*image_width/image_height
+	up 0.18*z
 	look_at <0,0,0>
 }
 

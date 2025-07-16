@@ -2,13 +2,13 @@
 use Getopt::Std;
 use Sys::Hostname;
 
-getopts("bcde:hmn:pq:rs:tvwx:");
+getopts("bcde:hmn:q:rs:tvw");
 
 # Print help message if -h option is specified
 if($opt_h) {
     print "Usage: pov-movie.pl <switches> <snapshot-directory> <header-number> [<param_filename>]\n\n";
     print "Switches:\n";
-    print "-b		  (Set transparent background)\n";
+    print "-b             (Set transparent background)\n";
     print "-c             (Add cylinders)\n";
     print "-d             (Don't duplicate existing files)\n";
     print "-e <num>       (Only render every <num> frame)\n";
@@ -16,40 +16,42 @@ if($opt_h) {
     print "-m             (Switch off the mesh)\n";
     print "-n <num>       (Render up to <num> threads)\n";
     print "-q <quality>   (Quality of rendering, 1=good, 3=extreme)\n";
-    print "-p		  (Project mesh onto a flat plane)\n";
     print "-r             (Render remotely in parallel)\n";
     print "-s <frame>     (Render a single frame)\n";
     print "-t             (Render mesh as triangles, without normals)\n";
     print "-v             (Verbose output)\n";
     print "-w             (Disable making a movie)\n";
-    print "-x <mode>      (Specify new texture to color by - default curvature)\n";
     exit 0;
 }
 
 die "Two or three arguments required" unless @ARGV==2 || @ARGV==3;
 
 # Set variables used for remote processing
-$rdir="esim/mesh/sheet";
-@nlist=("tara.seas.harvard.edu","shasta.seas.harvard.edu","yulong.seas.harvard.edu","etna.seas.harvard.edu",
-        "meili.seas.harvard.edu","rainier.seas.harvard.edu",
-        "aconcagua.seas.harvard.edu","matterhorn.seas.harvard.edu","denali.seas.harvard.edu");
-$nodes=$#nlist+1;
-$queue=$nodes==1?1:0;$h=0;
+if($opt_r) {
+    $rdir="esim/mesh/fiber";
+    open A,"../config/rhosts" or die "Can't open remote hosts\n";
+    @nlist=();@nthr=();
+    while(<A>) {
+        next if /^#/;
+        @c=split;
+        if($#c>=1) {
+            push @nlist,$c[0];
+            push @nthr,$c[1];
+        }
+    }
+    close A;
+    $nodes=$#nlist+1;
+    $queue=$nodes==1?1:0;$h=0;
+}
 
 # Set miscellaneous variables, and those used to control which frames are
 # rendered
 $dr=$ARGV[0];
 $msh=$opt_t?"mtr":"msh";
-$msh=$opt_p?"mpj":$msh;
-$cyl=$opt_p?"cpj":"cyl";
 $verb=$opt_v?"":">/dev/null 2>/dev/null";
 $every=$opt_e?$opt_e:1;
 $a=defined $opt_s?$opt_s:0;
 $opt_n=$opt_s if defined $opt_s;
-@xlist=("crv","str","bnd","tot","strain","pls");
-$opt_x=0 unless defined $opt_x;
-die "Texture mode out of range\n" if $opt_x>=scalar(@xlist);
-$tex=$xlist[$opt_x];
 
 # Read the first line of the POV-Ray header file to get the rendering
 # dimensions. Assemble the POV-Ray flags.
@@ -88,9 +90,9 @@ while(-e "$dr/pts.$a") {
         $_=$gp[$i];
 
         if(/^#include "msh.pov"/) {
-            print A `./unpack $msh $tex $dr $a $par -`;
+            print A `./unpack $msh $dr $a -`;
         } elsif(/^#include "cyl.pov"/) {
-            print A `./unpack $cyl $tex $dr $a $par -`;
+            print A `./unpack $cyl $dr $a -`;
         } else {
             print A;
         }
@@ -130,14 +132,10 @@ if($opt_r) {wait foreach 0..($queue?$nodes-1:$h);}
 
 # Additional code to automatically make a movie
 unless ($opt_w) {
-    ($mf=$dr)=~s/\.out//;
-    $uname=`uname`;
-    if($uname=~/Linux/) {
-        unlink "$mf.mpg";
-        system "ffmpeg -r 40 -y -i $dr/fr_%4d.png -vb 20M $mf.mpg"
-    } elsif($uname=~/Darwin/) {
-        unlink "$mf.mov";
-        system "qt_export --sequencerate=40 $dr/fr_0001.png --loadsettings=".
-               "../../misc/qtprefs/qt --replacefile $mf.mov";
-    }
+    ($mf=$dr)=~s/\.odr//;
+    unlink "$mf.mov";
+    system "ffmpeg -r 30 -y -i $dr/fr_%4d.png -preset veryslow -c:v libx265 -crf 17 -pix_fmt yuv420p -tag:v hvc1 -movflags faststart $mf.mov";
 }
+
+# Alternative movie-making command for older H.264 standard (more compatible, less efficient)
+#ffmpeg -r 30 -y -i fr%4d.png -preset veryslow -c:v libx264 -crf 17 -pix_fmt yuv420p -movflags faststart plain_demo.mov
