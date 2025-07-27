@@ -7,14 +7,13 @@
 int main() {
 
     // Read in the mesh
-    int len=101;
+    int len=81;
     int inc=20;
     char buf[128];
-    sprintf(buf,"sh48_%dx%d.bin",len,len);
+    sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.2,0.02,0,0.005,false);
-    mesh_rk4 mp(par,buf); // use an RK4 integrator
-    //mesh_rkfsal mp(par,buf); // use an RK-FSAL adaptive integrator
+    mesh_param par(0.2,0.02,0,0.2,false);
+    mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh
     double wx,wy,wz,w;
@@ -30,10 +29,10 @@ int main() {
 
     // Add Gaussian displacement around the central location
     for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3)
-        p[2]+=-0.1+0.0001*exp(-0.1*(*p*(*p)+p[1]*p[1]));
+        p[2]+=-0.1+0.02*exp(-0.1*(*p*(*p)+p[1]*p[1]));
 
     // Add external potential.
-    ep_spherical eps(40,0.05);
+    ep_spherical eps(80,10,5000,0.0002);
     mp.add(&eps);
 
     /* Increment spring rest lengths by random amount in a chosen interval
@@ -42,8 +41,8 @@ int main() {
     //mp.perturb_springs(1,1.+0.01*inc);
 
     // Setup the output directory.
-    mp.setup_output_dir("srun_b.odr");
+    mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-    mp.solve_adaptive(25,1e-4,1e-4,false,500);
+    mp.solve_adaptive(5500,1e-3,1e-3,false,550);
 }

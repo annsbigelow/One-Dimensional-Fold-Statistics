@@ -20,8 +20,8 @@ light_source{<-8,-20,30> color rgb <0.77,0.75,0.75>}
 light_source{<25,-12,12> color rgb <0.38,0.40,0.40>}
 
 #declare t_mesh=texture{
-	pigment{rgbft <1,0.8,0.6,0,0.4>}
-	finish{specular 0.4 ambient 0.4}
+	pigment{rgb <0.4,0.6,1>}
+	finish{specular 0.4 ambient 0.3}
 }
 
 #include "msh.pov"

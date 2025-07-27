@@ -51,8 +51,6 @@ double ep_centering::energy(double t,int n,double *in) {
 /** Adds accelerations to the mesh points due to the quadratic potential.
  * \param[in] t the current time.
  * \param[in] n the number of mesh points.
- * \param[in] is the starting mesh point.
- * \param[in] ie the ending mesh point (excluded).
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
 void ep_quadratic::accel(double t,int n,double *in,double *acc) {
@@ -76,27 +74,32 @@ double ep_quadratic::energy(double t,int n,double *in) {
 }
 
 /** Initialize potential parameters.
- * \param[in] r_cut_ cutoff radius for spherical potential.
+ * \param[in] r_start_ initial cutoff radius.
+ * \param[in] r_end_ final cutoff radius.
+ * \param[in] ramp_ ramping time to reach the final cutoff radius.
  * \param[in] C_ strength of potential. */
-void ep_spherical::set_params(double r_cut_,double C_) {
-    r_cut=r_cut_;
-    r_cut2=r_cut*r_cut;
+void ep_spherical::set_params(double r_start_,double r_end_,double ramp_,double C_) {
+    r_start=r_start_;
+    r_end=r_end_;
+    ramp=ramp_;
+    fac=(r_end-r_start)/ramp;
     C=C_;
 }
 
 /** Adds accelerations to spherical potential.
  * \param[in] t the current time.
- * \param[in] is the starting mesh point.
- * \param[in] ie the ending mesh point (excluded).
+ * \oarma[in] n the number of mesh points.
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
-void ep_spherical::accel(double t,int n,double *in,double *acc) { // In parallel
-    double rsq,fac,*pp,*ap,rc=r_cut-t*0.1,rc2=rc*rc;
+void ep_spherical::accel(double t,int n,double *in,double *acc) {
+    double rsq,o,*pp,*ap,rc=t<ramp?r_start+fac*t:r_end,rc2=rc*rc;
     for(pp=in,ap=acc;ap<acc+3*n;pp+=3,ap+=3) {
         rsq=(*pp)*(*pp)+pp[1]*pp[1]+pp[2]*pp[2];
         if(rsq>rc2) {
-            fac=C*(1-rc/sqrt(rsq));
-            *ap-=fac*(*pp); ap[1]-=fac*pp[1]; ap[2]-=fac*pp[2];
+            o=C*(1-rc/sqrt(rsq));
+            *ap-=o*(*pp);
+            ap[1]-=o*pp[1];
+            ap[2]-=o*pp[2];
         }
     }
 }
@@ -106,12 +109,12 @@ void ep_spherical::accel(double t,int n,double *in,double *acc) { // In parallel
  * \param[in] n the number of mesh points.
  * \param[in] in the mesh point positions. */
 double ep_spherical::energy(double t,int n,double *in) {
-    double en=0.,fac,rsq;
+    double en=0.,rsq,o,rc=t<ramp?r_start+fac*t:r_end,rc2=rc*rc;
     for(double *pp=in;pp<in+3*n;pp+=3) {
         rsq=(*pp)*(*pp)+pp[1]*pp[1]+pp[2]*pp[2];
-        if(rsq>r_cut2) {
-            fac=sqrt(rsq)-r_cut;
-            en+=fac*fac;
+        if(rsq>rc2) {
+            o=sqrt(rsq)-rc;
+            en+=o*o;
         }
     }
     return 0.5*C*en;
@@ -120,8 +123,6 @@ double ep_spherical::energy(double t,int n,double *in) {
 /** Adds accelerations to the mesh points due to the piston potential.
  * \param[in] t the current time.
  * \param[in] n the number of mesh points.
- * \param[in] is the starting mesh point.
- * \param[in] ie the ending mesh point (excluded).
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
 void ep_piston::accel(double t,int n,double *in,double *acc) {

@@ -28,8 +28,9 @@ die "Two or three arguments required" unless @ARGV==2 || @ARGV==3;
 
 # Set variables used for remote processing
 if($opt_r) {
-    $rdir="esim/mesh/fiber";
     open A,"../config/rhosts" or die "Can't open remote hosts\n";
+    $rdir=<A>;
+    chomp $rdir;
     @nlist=();@nthr=();
     while(<A>) {
         next if /^#/;

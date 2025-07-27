@@ -1,3 +1,5 @@
+Single POV-Ray example
+======================
 To render the POV-Ray example:
 
 1. Create a spherical mesh using
@@ -22,3 +24,45 @@ You can run with slightly higher quality with this:
 povray +H1200 +W1200 +R6 -J +A0.01 +Osph.png sph.pov
 
 Changing sph.pov to use sph_1000_t.pov instead will switch off the normal interpolation, resulting in flat triangular facets for the mesh.
+
+Movie
+=====
+Make sure you have FFmpeg installed. It's available via many package managers. Generate a mesh:
+
+./sheet_gen rec 1 81 81
+
+Run the simulation:
+
+./ssheet_test
+
+Do a local rendering of the simulation output, up to 20 frames:
+
+./pov-movie.pl -n 20 srun_h.odr 1
+
+For more info on options, type
+
+./pov-movie.pl -h
+
+For a remote render, you need to create a file called "rhosts" in the config directory. See the rhosts.example file, which looks like this:
+
+render
+shasta.math.wisc.edu 32
+ruapehu.math.wisc.edu 20
+tara.math.wisc.edu 28
+meili.math.wisc.edu 4
+yulong.math.wisc.edu 20
+katahdin.math.wisc.edu 20
+haleakala.math.wisc.edu 12
+#elbrus.math.wisc.edu 64
+
+The first line gives the name of a directory on the remote machines in which to perform the render. Thus, to use this example, you'd have to do "mkdir render" on all the machines. You could change this to something else. Each subsequent line gives a host name and the number of cores to use on that host. A pound sign comments out a line.
+
+You also need to set up SSH keys on all of the hosts, so that you can log in without a password. I can show you how to do that if you aren't familiar with it. After that, type:
+
+./pov-movie.pl -r srun_h.odr 1
+
+If it runs successfully, you should get a movie called srun_h.mov.
+
+Sometimes, some of the images are already there and there's no need to regenerate them. In that case you can type:
+
+./pov-movie.pl -r -d srun_h.odr 1
