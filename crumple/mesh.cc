@@ -201,6 +201,10 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // Add accelerations due to springs and external potentials
     acceleration(t_,in,acc);
 
+    // If repulsion is enabled, then add in the contact forces between mesh
+    // points
+    if(repulsion) contact_forces(in,out);
+
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
@@ -218,6 +222,50 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
         out[3*i]=in[3*n+3*i];
         out[3*i+1]=in[3*n+3*i+1];
         out[3*i+2]=in[3*n+3*i+2];
+    }
+}
+
+/** Adds in the contact forces between nodes in the mesh.
+ * \param[in] in the mesh point positions.
+ * \param[in] out the mesh point accelerations (cumulative). */
+void mesh::contact_forces(double *in,double *out) {
+    double *acc=out+3*n,dx,dy,dz,rsq,Kdt=100;
+    const double diam=0.1,diamsq=diam*diam;
+
+    // Build the proximity grid data structure
+    pg.setup(in,n);
+    pg.populate(in,n);
+
+    // Loop over all of the balls in the simulation
+    for(int i=0;i<n;i++) {
+
+        // Determine the grid subregion that could possibly interact with this
+        // ball
+        int li,ui,lj,uj,lk,uk;
+        pg.subregion(in+3*i,diam,li,ui,lj,uj,lk,uk);
+
+        for(int ck=lk;ck<=uk;ck++) for(int cj=lj;cj<=uj;cj++) {
+            for(int ci=li;ci<=ui;ci++) {
+                int ijk=ci+pg.m*(cj+pg.n*ck);
+
+                // Loop over all mesh points in this block
+                point_info *pip=pg.p[ijk],*pie=pip+pg.co[ijk];
+                for(;pip<pie;pip++) {
+                    double dx=pip->x-in[3*i],dy=pip->y-in[3*i+1],dz=pip->z-in[3*i+2],
+                           rsq=dx*dx+dy*dy+dz*dz;
+
+                    // If the mesh point is in contact then compute the acceleration
+                    // contribution
+                    if(rsq<diamsq) {
+                        double fac=Kdt*(1-diam/sqrt(rsq));
+                        dx*=fac;dy*=fac;dz*=fac;
+                        acc[3*i]+=dx;
+                        acc[3*i+1]+=dy;
+                        acc[3*i+2]+=dz;
+                    }
+                }
+            }
+        }
     }
 }
 

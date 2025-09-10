@@ -5,7 +5,7 @@ lflags=`gsl-config --libs`
 iflags=`gsl-config --cflags`
 
 # Lists of files to be built
-objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o ext_potential.o
+objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o ext_potential.o p_grid.o
 src=$(patsubst %.o,%.cc,$(objs) $(mg_objs))
 execs=ode_test ode_conv virt sheet_gen sph_gen unpack mesh_conv ssheet_test bsheet_test
 

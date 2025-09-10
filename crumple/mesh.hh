@@ -9,6 +9,7 @@
 #include "rk4.hh"
 #include "mesh_param.hh"
 #include "ext_potential.hh"
+#include "p_grid.hh"
 
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_multimin.h>
@@ -71,6 +72,7 @@ class mesh : public mesh_param {
         void setup_springs();
         void perturb_springs(double min_fac,double max_fac);
         void reset_relaxed();
+        void contact_forces(double *in,double *out);
         void acceleration(double t_,double *in,double *acc);
         void accel_springs(double *in,double *acc);
         void accel_bsheet(double *in,double *acc);
@@ -154,6 +156,8 @@ class mesh : public mesh_param {
         char *odir;
         /** The buffer for assembling output filenames, if present. */
         char *obuf;
+        /** A reference to the proximity grid data structure. */
+        proximity_grid pg;
         /** "Frozen" time point, needed when halting simulation to perform
         derivative checks or energy minimization. */
         double fzt;
