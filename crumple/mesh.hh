@@ -40,6 +40,8 @@ class mesh : public mesh_param {
         ext_potential* ex_pot[max_ep];
         /** The node positions. */
         double *pts;
+		/** The contracting node positions. */
+		double *sh_pts;
         /** The node velocities. */
         double *vel;
         /** The number of connections by node. */
@@ -167,6 +169,7 @@ class mesh : public mesh_param {
         void cyl_print(FILE *fp,double *p,double *q);
         void edge_force(double *in,double *acc,int i,int k);
         void stretch_force(double *in,double *acc,int i,int k,double sf);
+		void shrink_force(double* in, double* acc, int i);
         void damp_force(double *in,double *acc,int i,int k);
         double edge_energy(double *in,int i,int k);
         void triangle_force(double *in,double *acc,int i,int j,int k,int l);

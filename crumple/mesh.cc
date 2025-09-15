@@ -2,7 +2,7 @@
 #include "vec3.hh"
 
 /** The constructor reads in a mesh from a file, and sets up the vertices and
- * edge tables.
+ * edge tables. If applying a shrink force, the initial nodes are copied. 
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
@@ -11,6 +11,12 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
     read_topology(fp);
     read_positions(fp);
     fclose(fp);
+
+	// Copy initial node positions
+	if (shrink) {
+		sh_pts = new double[3*n];
+		for (int i=0;i<3*n;i++) sh_pts[i]=pts[i];
+	}
 }
 
 /** The constructor reads in mesh topology and vertex positions from separate
@@ -42,6 +48,7 @@ mesh::~mesh() {
     delete [] edm;delete [] ed;
     delete [] ncn;
     delete [] pts;
+	delete [] sh_pts;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -330,6 +337,11 @@ void mesh::accel_rbsheet(double *in,double *acc) {
         bend_force(in,acc,i,*tp,tp[1],tp[2],*(rp++));
         tp+=3;
     }
+
+	// next add in shrink forces.
+	if (shrink) { 
+		for(i=0;i<n;i++) shrink_force(in,acc,i); 
+	}
 }
 
 /** Computes the energy from the spring forces in the shapeable sheet
@@ -571,6 +583,27 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
     dx*=rs*K;dy*=rs*K;dz*=rs*K;
     *ai+=dx;ai[1]+=dy;ai[2]+=dz;
     *ak-=dx;ak[1]-=dy;ak[2]-=dz;
+}
+
+/** Calculates the acceleration due to the contraction of nodes 
+ * towards the centroid. */
+void mesh::shrink_force(double *in, double *acc, int i) {
+	// Contract nodes (cumulative) (should be moved to ext_potential)
+	double *z=sh_pts+3*i;
+	z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
+	
+	// Define "springs" between shrinking points and current nodes
+	double *is=sh_pts+3*i, *ip=in+3*i,
+			dx=*is-*ip, dy=is[1]-ip[1], dz=is[2]-ip[2],
+			*ai=acc+3*i;
+
+	// Calculate force contributions to each current node
+	// Use a relaxed edge length to define a reasonable shrink spring rest length
+	double ls=reg[0]*0.3, rs=ls/sqrt(dx*dx+dy*dy+dz*dz)-1;
+
+	// Add the force contributions to the vertex
+	dx*=rs*ks;dy*=rs*ks;dz*=rs*ks;
+	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
 }
 
 void mesh::damp_force(double *in,double *acc,int i,int k) {

@@ -12,7 +12,7 @@ int main() {
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.2,0.02,0,0.2,false);
+    mesh_param par(0.2,0.02,0,0.2,false,true,0.05,0.01);
     mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh
@@ -32,8 +32,8 @@ int main() {
         p[2]+=-0.1+0.02*exp(-0.1*(*p*(*p)+p[1]*p[1]));
 
     // Add external potential.
-    ep_spherical eps(80,10,5000,0.0002);
-    mp.add(&eps);
+    //ep_spherical eps(80,10,5000,0.0002);
+    //mp.add(&eps);
 
     /* Increment spring rest lengths by random amount in a chosen interval
     (Oppenheimer paper). */
@@ -44,5 +44,6 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-    mp.solve_adaptive(5500,1e-3,1e-3,false,550);
+    //mp.solve_adaptive(5500,1e-3,1e-3,false,550);
+	mp.solve_adaptive(2000, 1e-3, 1e-3, false, 200);
 }
