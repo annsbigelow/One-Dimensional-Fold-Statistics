@@ -212,6 +212,15 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // points
     if(repulsion) contact_forces(in,out);
 
+	// If shrinking substrate is enabled, contract nodes (cumulative)
+	if(shrink) {
+		for (int j=0;j<n;j++) {
+			double *z=sh_pts+3*j;
+			z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
+
+		}
+	}
+
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
@@ -588,10 +597,6 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
 /** Calculates the acceleration due to the contraction of nodes 
  * towards the centroid. */
 void mesh::shrink_force(double *in, double *acc, int i) {
-	// Contract nodes (cumulative) (should be moved to ext_potential)
-	double *z=sh_pts+3*i;
-	z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
-	
 	// Define "springs" between shrinking points and current nodes
 	double *is=sh_pts+3*i, *ip=in+3*i,
 			dx=*is-*ip, dy=is[1]-ip[1], dz=is[2]-ip[2],
@@ -599,11 +604,11 @@ void mesh::shrink_force(double *in, double *acc, int i) {
 
 	// Calculate force contributions to each current node
 	// Use a relaxed edge length to define a reasonable shrink spring rest length
-	double ls=reg[0]*0.3, rs=ls/sqrt(dx*dx+dy*dy+dz*dz)-1;
+	double ls=reg[0]*0.2, rs=ls/sqrt(dx*dx+dy*dy+dz*dz)-1;
 
 	// Add the force contributions to the vertex
 	dx*=rs*ks;dy*=rs*ks;dz*=rs*ks;
-	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
+	*ai-=dx;ai[1]-=dy;ai[2]-=dz;
 }
 
 void mesh::damp_force(double *in,double *acc,int i,int k) {
