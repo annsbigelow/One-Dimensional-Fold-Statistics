@@ -2,7 +2,7 @@
 #include "vec3.hh"
 
 /** The constructor reads in a mesh from a file, and sets up the vertices and
- * edge tables. If applying a shrink force, the initial nodes are copied. 
+ * edge tables.  
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
@@ -11,12 +11,6 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
     read_topology(fp);
     read_positions(fp);
     fclose(fp);
-
-	// Copy initial node positions
-	if (shrink) {
-		sh_pts = new double[3*n];
-		for (int i=0;i<3*n;i++) sh_pts[i]=pts[i];
-	}
 }
 
 /** The constructor reads in mesh topology and vertex positions from separate
@@ -602,13 +596,9 @@ void mesh::shrink_force(double *in, double *acc, int i) {
 			dx=*is-*ip, dy=is[1]-ip[1], dz=is[2]-ip[2],
 			*ai=acc+3*i;
 
-	// Calculate force contributions to each current node
-	// Use a relaxed edge length to define a reasonable shrink spring rest length
-	double ls=reg[0]*0.2, rs=ls/sqrt(dx*dx+dy*dy+dz*dz)-1;
-
 	// Add the force contributions to the vertex
-	dx*=rs*ks;dy*=rs*ks;dz*=rs*ks;
-	*ai-=dx;ai[1]-=dy;ai[2]-=dz;
+	dx*=ks;dy*=ks;dz*=ks;
+	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
 }
 
 void mesh::damp_force(double *in,double *acc,int i,int k) {
