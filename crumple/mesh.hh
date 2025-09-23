@@ -87,6 +87,7 @@ class mesh : public mesh_param {
         int bandwidth();
         void add(ext_potential *ep);
 		double sdev();
+		double tot_area();
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {

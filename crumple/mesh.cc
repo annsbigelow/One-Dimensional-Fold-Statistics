@@ -693,3 +693,24 @@ double mesh::sdev() {
 	delete [] z;
 	return sqrt(sd);
 }
+
+/** Calculates the surface area of the sheet. */
+double mesh::tot_area() {
+	int *tp=to[0],i,j,k,l;
+	double A=0.,magn;
+	// Loop through all of the unique edges
+	for(i=0;i<n;i++) while(tp<to[i+1]) {
+		j=*tp; k=tp[1], l=tp[2];
+
+		double *ii=pts+3*i, *ij=pts+3*j, *ik=pts+3*k, *il=pts+3*l;
+		vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
+			 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
+			 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
+
+		// Compute cross product of two edges, for two triangles
+		e=d*c; magn=e.magnitude();
+		A+=magn/2;
+		tp+=3;
+	}
+	return A;
+}

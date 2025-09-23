@@ -62,4 +62,5 @@ int main() {
 
     // Evolve in time with equally spaced output
 	mp.solve_adaptive(700, 1e-3, 1e-3, false, 200);
+	printf("Sheet area: %g\n",mp.tot_area());
 }
