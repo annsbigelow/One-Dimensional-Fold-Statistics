@@ -43,6 +43,7 @@ mesh::~mesh() {
     delete [] ncn;
     delete [] pts;
 	delete [] sh_pts;
+	delete [] shs;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -210,7 +211,8 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	if(shrink) {
 		for (int j=0;j<n;j++) {
 			double *z=sh_pts+3*j;
-			z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
+			z[0]*=(1-shs[3*j]);z[1]*=(1-shs[3*j+1]);z[2]*=(1-shs[3*j+2]);
+			//z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
 
 		}
 	}
@@ -673,4 +675,21 @@ void mesh::add(ext_potential *ep) {
         exit(1);
     }
     ex_pot[n_ep++]=ep;
+}
+
+/** Calculates the standard deviation of the z-coordinates of the sheet nodes 
+	as a measure of deformation. */
+double mesh::sdev() {
+	double *pt,mean=0,sd=0;
+	double *z=new double[n];
+	for(int i=0;i<n;i++) {
+		pt=pts+3*i; z[i]=pt[2];
+		mean+=z[i];
+	}
+	mean/=n; 
+	for(int i=0;i<n;i++) sd+=(z[i]-mean)*(z[i]-mean);
+	sd/=(n-1);
+
+	delete [] z;
+	return sqrt(sd);
 }

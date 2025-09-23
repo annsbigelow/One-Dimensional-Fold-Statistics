@@ -7,12 +7,12 @@
 int main() {
 
     // Read in the mesh
-    int len=81;
+    int len=100;
     int inc=20;
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.3,0.01,0,0.2,false,true,0.0001,0.001);
+    mesh_param par(0.5,0.01,0,0.2,false,true,0.0003,0.001);
 	//mesh_param par(0.2,0.02,0,0.2,false);
     mesh_rk4 mp(par,buf);
 
@@ -34,10 +34,18 @@ int main() {
 	}
 
 	// After initial displacement is applied, copy initial node positions in the 
-	// presence of a shrinking substrate
+	// presence of a shrinking substrate.
+	// And apply a random perturbation to the shrink strength of each contracting node.
 	if (mp.shrink) {
-		mp.sh_pts=new double[3*mp.n];
-		for (int i=0;i<3*mp.n;i++) mp.sh_pts[i]=mp.pts[i];
+		mp.sh_pts=new double[3*mp.n]; 
+		srand(2);
+		mp.shs=new double[3*mp.n];
+		double min_sh=mp.sh_strength-.00025, max_sh=mp.sh_strength+.0004;
+		double rfac=(max_sh-min_sh)/RAND_MAX;
+		for (int i=0;i<3*mp.n;i++) {
+			mp.sh_pts[i]=mp.pts[i];
+			mp.shs[i]=min_sh+rfac*static_cast<double>(rand());
+		}
 	}
 
     // Add external potential.
@@ -53,6 +61,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-    mp.solve_adaptive(3000,1e-3,1e-3,false,300);
-	//mp.solve_adaptive(2000, 1e-3, 1e-3, false, 200);
+	mp.solve_adaptive(700, 1e-3, 1e-3, false, 200);
 }

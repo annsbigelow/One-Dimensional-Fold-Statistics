@@ -42,6 +42,8 @@ class mesh : public mesh_param {
         double *pts;
 		/** The contracting node positions. */
 		double *sh_pts;
+		/** The shrink strengths for each node. */
+		double *shs;
         /** The node velocities. */
         double *vel;
         /** The number of connections by node. */
@@ -84,6 +86,7 @@ class mesh : public mesh_param {
         double energy_bsheet(double *in);
         int bandwidth();
         void add(ext_potential *ep);
+		double sdev();
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
