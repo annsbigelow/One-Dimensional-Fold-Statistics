@@ -144,7 +144,7 @@ void mesh::setup_springs() {
         }
         }
         to[n]=top;
-        printf("%d %d\n",nh,ct);
+        //printf("%d %d\n",nh,ct);
     }
 }
 

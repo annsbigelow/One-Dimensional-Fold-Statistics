@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "mesh.hh"
+#include "common.hh"
 
 int main(int argc,char **argv) {
 
@@ -19,6 +20,8 @@ int main(int argc,char **argv) {
 	int mode;
 	if(strcmp(argv[1],"0")==0) mode=0;
 	else mode=1;
+
+	bool area=true;
 	
 	// Read in the mesh 
 	mesh_param par(0.5, 0.01, 0, 0.2, false, true, 0.0003, 0.001);
@@ -41,12 +44,19 @@ int main(int argc,char **argv) {
 		mp = new mesh(par, f_topo, f_pts);
 
 		// Print the standard deviation of z-coordinates of the nodes
-		printf("Deformation measure: %g\n", mp->sdev());
+		printf("Roughness measure: %g\n", mp->sdev());
+
+		// Setup triangle info and print the sheet area 
+		if(area) {
+			mp->setup_springs();
+			printf("Sheet area: %g\n", mp->tot_area());
+		}
 		
 		delete mp;
 	}
 	else {
 		double* sdevs = new double[fnum];
+		double* area_arr = new double[fnum];
 		// Read in the data for each frame
 		for(int j=0;j<fnum;j++) { 
 			sprintf(f_topo, "%s/topo", argv[2]);
@@ -54,10 +64,26 @@ int main(int argc,char **argv) {
 			mp=new mesh(par, f_topo, f_pts);
 
 			sdevs[j]=mp->sdev();
-			printf("Std: %g\n",sdevs[j]);
+			//printf("Std: %g\n",sdevs[j]);
+
+			if (area) {
+				mp->setup_springs();
+				//printf("Sheet area: %g\n", mp->tot_area());
+				area_arr[j]=mp->tot_area();
+			}
+
 			delete mp;
 		}
 		
+		// Write the data to a file 
+		FILE* fp=safe_fopen("sdevs.bin", "wb");
+		fwrite(sdevs,sizeof(double),fnum,fp);
+		fclose(fp);
+		FILE* fp1 = safe_fopen("areas.bin", "wb");
+		fwrite(area_arr, sizeof(double), fnum, fp1);
+		fclose(fp1);
+
+		delete[] area_arr;
 		delete[] sdevs;
 	}
 	delete[] f_topo;
