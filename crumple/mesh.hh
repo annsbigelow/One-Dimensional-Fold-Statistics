@@ -80,7 +80,7 @@ class mesh : public mesh_param {
         void acceleration(double t_,double *in,double *acc);
         void accel_springs(double *in,double *acc);
         void accel_bsheet(double *in,double *acc);
-        void accel_rbsheet(double *in,double *acc);
+        void accel_rbsheet(double t_,double *in,double *acc);
         double energy(double t_,double *in);
         double energy_springs(double *in);
         double energy_bsheet(double *in);
@@ -173,7 +173,7 @@ class mesh : public mesh_param {
         void cyl_print(FILE *fp,double *p,double *q);
         void edge_force(double *in,double *acc,int i,int k);
         void stretch_force(double *in,double *acc,int i,int k,double sf);
-		void shrink_force(double* in, double* acc, int i);
+		void shrink_force(double fac,double* in, double* acc, int i);
         void damp_force(double *in,double *acc,int i,int k);
         double edge_energy(double *in,int i,int k);
         void triangle_force(double *in,double *acc,int i,int j,int k,int l);

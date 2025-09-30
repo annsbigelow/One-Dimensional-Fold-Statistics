@@ -33,15 +33,17 @@ int main() {
         p[2]+=-0.1+0.02*exp(-0.1*(*p*(*p)+p[1]*p[1]));
 	}
 
-	// After initial displacement is applied, copy initial node positions in the 
+	// After initial displacement is applied, copy initial node positions in the
 	// presence of a shrinking substrate.
 	// And apply a random perturbation to the shrink strength of each contracting node.
 	if (mp.shrink) {
-		mp.sh_pts=new double[3*mp.n]; 
+		mp.sh_pts=new double[3*mp.n];
 		srand(2);
 		mp.shs=new double[3*mp.n];
 		double min_sh=mp.sh_strength-.00025, max_sh=mp.sh_strength+.0004;
 		double rfac=(max_sh-min_sh)/RAND_MAX;
+        // Use library function to copy data
+        //memcpy(mp.sh_pts,mp.pts,3*mp.n*sizeof(double));
 		for (int i=0;i<3*mp.n;i++) {
 			mp.sh_pts[i]=mp.pts[i];
 			mp.shs[i]=min_sh+rfac*static_cast<double>(rand());
@@ -61,5 +63,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	mp.solve_adaptive(700, 1e-3, 1e-3, false, 200);
+	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 250);
 }

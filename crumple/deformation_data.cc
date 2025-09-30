@@ -22,8 +22,8 @@ int main(int argc,char **argv) {
 	else mode=1;
 
 	bool area=true;
-	
-	// Read in the mesh 
+
+	// Read in the mesh
 	mesh_param par(0.5, 0.01, 0, 0.2, false, true, 0.0003, 0.001);
 	mesh *mp;
 
@@ -37,7 +37,7 @@ int main(int argc,char **argv) {
 	size_t l = strlen(argv[2])+16;
 	char* f_topo=new char[2*l], *f_pts=f_topo+l;
 
-	if (mode == 0) { 
+	if (mode == 0) {
 		// Read in the data
 		sprintf(f_topo, "%s/topo", argv[2]);
 		sprintf(f_pts, "%s/pts.%d", argv[2], fnum);
@@ -46,19 +46,19 @@ int main(int argc,char **argv) {
 		// Print the standard deviation of z-coordinates of the nodes
 		printf("Roughness measure: %g\n", mp->sdev());
 
-		// Setup triangle info and print the sheet area 
+		// Setup triangle info and print the sheet area
 		if(area) {
 			mp->setup_springs();
 			printf("Sheet area: %g\n", mp->tot_area());
 		}
-		
+
 		delete mp;
 	}
 	else {
 		double* sdevs = new double[fnum];
 		double* area_arr = new double[fnum];
 		// Read in the data for each frame
-		for(int j=0;j<fnum;j++) { 
+		for(int j=0;j<fnum;j++) {
 			sprintf(f_topo, "%s/topo", argv[2]);
 			sprintf(f_pts, "%s/pts.%d", argv[2], j);
 			mp=new mesh(par, f_topo, f_pts);
@@ -74,8 +74,8 @@ int main(int argc,char **argv) {
 
 			delete mp;
 		}
-		
-		// Write the data to a file 
+
+		// Write the data to a file
 		FILE* fp=safe_fopen("sdevs.bin", "wb");
 		fwrite(sdevs,sizeof(double),fnum,fp);
 		fclose(fp);

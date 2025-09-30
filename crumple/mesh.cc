@@ -2,7 +2,7 @@
 #include "vec3.hh"
 
 /** The constructor reads in a mesh from a file, and sets up the vertices and
- * edge tables.  
+ * edge tables.
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
@@ -205,17 +205,8 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 
     // If repulsion is enabled, then add in the contact forces between mesh
     // points
-    if(repulsion) contact_forces(in,out);
-
-	// If shrinking substrate is enabled, contract nodes (cumulative)
-	if(shrink) {
-		for (int j=0;j<n;j++) {
-			double *z=sh_pts+3*j;
-			z[0]*=(1-shs[3*j]);z[1]*=(1-shs[3*j+1]);z[2]*=(1-shs[3*j+2]);
-			//z[0]*=(1-sh_strength); z[1]*=(1-sh_strength); z[2]*=(1-sh_strength);
-
-		}
-	}
+    //if(repulsion)
+    contact_forces(in,out);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -241,12 +232,14 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] in the mesh point positions.
  * \param[in] out the mesh point accelerations (cumulative). */
 void mesh::contact_forces(double *in,double *out) {
-    double *acc=out+3*n,dx,dy,dz,rsq,Kdt=100;
-    const double diam=0.1,diamsq=diam*diam;
+    double *acc=out+3*n,rsq,K=100;
+    const double diam=2,diamsq=diam*diam,
+                 screen=6,screensq=screen*screen;
 
     // Build the proximity grid data structure
     pg.setup(in,n);
     pg.populate(in,n);
+    int fullcount=0,count=0;
 
     // Loop over all of the balls in the simulation
     for(int i=0;i<n;i++) {
@@ -262,23 +255,42 @@ void mesh::contact_forces(double *in,double *out) {
 
                 // Loop over all mesh points in this block
                 point_info *pip=pg.p[ijk],*pie=pip+pg.co[ijk];
-                for(;pip<pie;pip++) {
+                for(;pip<pie;pip++) if(pip->id>i) {
                     double dx=pip->x-in[3*i],dy=pip->y-in[3*i+1],dz=pip->z-in[3*i+2],
                            rsq=dx*dx+dy*dy+dz*dz;
 
                     // If the mesh point is in contact then compute the acceleration
                     // contribution
                     if(rsq<diamsq) {
-                        double fac=Kdt*(1-diam/sqrt(rsq));
-                        dx*=fac;dy*=fac;dz*=fac;
-                        acc[3*i]+=dx;
-                        acc[3*i+1]+=dy;
-                        acc[3*i+2]+=dz;
+
+                        // Rule out nearby points on the mesh
+                        int i2=pip->id;
+                        double *q=sh_pts+3*i,
+                               *r=sh_pts+3*i2,
+                               ex=q[0]-r[0],
+                               ey=q[1]-r[1],
+                               ez=q[2]-r[2];
+                        fullcount++;
+
+                        // If the points are far away from each other in the
+                        // mesh coordinates, then apply a contact force
+                        if(ex*ex+ey*ey+ez*ez>screensq) {
+                            double fac=K*(1-diam/sqrt(rsq));
+                            dx*=fac;dy*=fac;dz*=fac;
+                            acc[3*i]+=dx;
+                            acc[3*i+1]+=dy;
+                            acc[3*i+2]+=dz;
+                            acc[3*i2]-=dx;
+                            acc[3*i2+1]-=dy;
+                            acc[3*i2+2]-=dz;
+                            count++;
+                        }
                     }
                 }
             }
         }
     }
+    printf("%d total, %d real\n",fullcount,count);
 }
 
 /** Computes the acceleration due to springs and external potentials.
@@ -291,7 +303,7 @@ void mesh::acceleration(double t_,double *in,double *acc) {
     //if(repulsion) accel_repulsive(in,acc);
 
     // Compute accelerations from the sheet
-    bsheet_model?accel_rbsheet(in,acc):accel_springs(in,acc);
+    bsheet_model?accel_rbsheet(t_,in,acc):accel_springs(in,acc);
 
     // Add accelerations from the external potentials
     for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
@@ -326,7 +338,7 @@ void mesh::accel_springs(double *in,double *acc) {
 /** Computes the accelerations based on the bending sheet model with random mesh.
  * \param[in] in the mesh point positions.
  * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_rbsheet(double *in,double *acc) {
+void mesh::accel_rbsheet(double t_,double *in,double *acc) {
     int i,*ep=eo[0],*tp=to[0],of=ep-eom;
     double *rp=reg+of;
 
@@ -344,8 +356,9 @@ void mesh::accel_rbsheet(double *in,double *acc) {
     }
 
 	// next add in shrink forces.
-	if (shrink) { 
-		for(i=0;i<n;i++) shrink_force(in,acc,i); 
+	if (shrink) {
+        double fac=exp(-0.001*t_);
+		for(i=0;i<n;i++) shrink_force(fac,in,acc,i);
 	}
 }
 
@@ -590,12 +603,12 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
     *ak-=dx;ak[1]-=dy;ak[2]-=dz;
 }
 
-/** Calculates the acceleration due to the contraction of nodes 
+/** Calculates the acceleration due to the contraction of nodes
  * towards the centroid. */
-void mesh::shrink_force(double *in, double *acc, int i) {
+void mesh::shrink_force(double fac,double *in, double *acc, int i) {
 	// Define "springs" between shrinking points and current nodes
 	double *is=sh_pts+3*i, *ip=in+3*i,
-			dx=*is-*ip, dy=is[1]-ip[1], dz=is[2]-ip[2],
+			dx=*is*fac-*ip, dy=is[1]*fac-ip[1], dz=is[2]*fac-ip[2],
 			*ai=acc+3*i;
 
 	// Add the force contributions to the vertex
@@ -677,7 +690,7 @@ void mesh::add(ext_potential *ep) {
     ex_pot[n_ep++]=ep;
 }
 
-/** Calculates the standard deviation of the z-coordinates of the sheet nodes 
+/** Calculates the standard deviation of the z-coordinates of the sheet nodes
 	as a measure of deformation. */
 double mesh::sdev() {
 	double *pt,mean=0,sd=0;
@@ -686,7 +699,7 @@ double mesh::sdev() {
 		pt=pts+3*i; z[i]=pt[2];
 		mean+=z[i];
 	}
-	mean/=n; 
+	mean/=n;
 	for(int i=0;i<n;i++) sd+=(z[i]-mean)*(z[i]-mean);
 	sd/=(n-1);
 

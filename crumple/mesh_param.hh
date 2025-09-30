@@ -15,7 +15,7 @@ struct mesh_param {
 	/** The "strength" of the contracting substrate. */
 	const double sh_strength;
 	/** The weak shrink spring constant. */
-	const double ks; 
+	const double ks;
     /** Whether to include dashpots. */
     const bool dashpot;
     /** Whether to use the bendable sheet model, which also has connections
