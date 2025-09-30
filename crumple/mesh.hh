@@ -67,6 +67,7 @@ class mesh : public mesh_param {
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
+		void init_shrink(double min_sh,double max_sh);
         void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);
@@ -86,8 +87,8 @@ class mesh : public mesh_param {
         double energy_bsheet(double *in);
         int bandwidth();
         void add(ext_potential *ep);
-		double sdev();
-		double tot_area();
+		double sdev(double frac,int nx,int ny);
+		double tot_area(double frac,int nx,int ny);
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {

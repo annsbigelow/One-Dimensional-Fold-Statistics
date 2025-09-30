@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "mesh.hh"
 #include "vec3.hh"
 
@@ -193,6 +195,19 @@ void mesh::reset_relaxed() {
     }
 }
 
+/** Copies initial node positions in the presence of a shrinking substrate and applies
+*	a random perturbation to the rate of each contracting node.
+*	\param[in] min_sh the minimum rate to sample from.
+*/
+void mesh::init_shrink(double min_sh,double max_sh) {
+	sh_pts = new double[3*n];
+	srand(2);
+	shs=new double[n];
+	double rfac=(max_sh-min_sh)/RAND_MAX;
+	std::memcpy(sh_pts,pts,3*n*sizeof(double));
+	for (int i=0;i<n;i++) shs[i]=min_sh+rfac*static_cast<double>(rand());
+}
+
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
@@ -232,14 +247,14 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] in the mesh point positions.
  * \param[in] out the mesh point accelerations (cumulative). */
 void mesh::contact_forces(double *in,double *out) {
-    double *acc=out+3*n,rsq,K=100;
+    double *acc=out+3*n,K=100;
     const double diam=2,diamsq=diam*diam,
                  screen=6,screensq=screen*screen;
 
     // Build the proximity grid data structure
     pg.setup(in,n);
     pg.populate(in,n);
-    int fullcount=0,count=0;
+    //int fullcount=0,count=0;
 
     // Loop over all of the balls in the simulation
     for(int i=0;i<n;i++) {
@@ -263,14 +278,14 @@ void mesh::contact_forces(double *in,double *out) {
                     // contribution
                     if(rsq<diamsq) {
 
-                        // Rule out nearby points on the mesh
+                        // Rule out nearby points on the mesh using initial positions
                         int i2=pip->id;
                         double *q=sh_pts+3*i,
                                *r=sh_pts+3*i2,
                                ex=q[0]-r[0],
                                ey=q[1]-r[1],
                                ez=q[2]-r[2];
-                        fullcount++;
+                        //fullcount++;
 
                         // If the points are far away from each other in the
                         // mesh coordinates, then apply a contact force
@@ -283,14 +298,14 @@ void mesh::contact_forces(double *in,double *out) {
                             acc[3*i2]-=dx;
                             acc[3*i2+1]-=dy;
                             acc[3*i2+2]-=dz;
-                            count++;
+                            //count++;
                         }
                     }
                 }
             }
         }
     }
-    printf("%d total, %d real\n",fullcount,count);
+    //printf("%d total, %d real\n",fullcount,count);
 }
 
 /** Computes the acceleration due to springs and external potentials.
@@ -357,8 +372,11 @@ void mesh::accel_rbsheet(double t_,double *in,double *acc) {
 
 	// next add in shrink forces.
 	if (shrink) {
-        double fac=exp(-0.001*t_);
-		for(i=0;i<n;i++) shrink_force(fac,in,acc,i);
+        //double fac=exp(-0.001*t_);
+		for(i=0;i<n;i++) {
+			double lam=shs[i], fac=exp(-lam*t_);
+			shrink_force(fac,in,acc,i);
+		}
 	}
 }
 
@@ -691,10 +709,16 @@ void mesh::add(ext_potential *ep) {
 }
 
 /** Calculates the standard deviation of the z-coordinates of the sheet nodes
-	as a measure of deformation. */
-double mesh::sdev() {
+	as a measure of deformation. 
+*	\param[in] frac The percentage of the sheet edges to ignore.
+*	\param[in] nx The length dimension of the sheet.
+	*/
+double mesh::sdev(double frac,int nx,int ny) {
 	double *pt,mean=0,sd=0;
 	double *z=new double[n];
+
+	//int n_int = 
+
 	for(int i=0;i<n;i++) {
 		pt=pts+3*i; z[i]=pt[2];
 		mean+=z[i];
@@ -707,8 +731,10 @@ double mesh::sdev() {
 	return sqrt(sd);
 }
 
-/** Calculates the surface area of the sheet. */
-double mesh::tot_area() {
+/** Calculates the surface area of the sheet. 
+*	\param[in] frac The percentage of the sheet edges to ignore.
+*/
+double mesh::tot_area(double frac,int nx,int ny) {
 	int *tp=to[0],i,j,k,l;
 	double A=0.,magn;
 	// Loop through all of the unique edges
@@ -720,7 +746,7 @@ double mesh::tot_area() {
 			 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
 			 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
 
-		// Compute cross product of two edges, for two triangles
+		// Compute cross product of two edges for two triangles
 		e=d*c; magn=e.magnitude();
 		A+=magn/2;
 		tp+=3;
