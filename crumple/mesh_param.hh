@@ -12,8 +12,6 @@ struct mesh_param {
     const double kappa;
     /** The effective diameter of repulsive potential. */
     double sigma;
-	/** The "strength" of the contracting substrate. */
-	const double sh_strength;
 	/** The weak shrink spring constant. */
 	const double ks;
     /** Whether to include dashpots. */
@@ -28,22 +26,22 @@ struct mesh_param {
 	/** Whether to include weak shrink springs for wrinkling. */
 	const bool shrink;
     mesh_param(double K_,double drag_,bool fix_boundary_) : K(K_), drag(drag_),
-        B(0.),  kappa(0.), sigma(0.), sh_strength(0.), ks(0.), dashpot(false),
+        B(0.),  kappa(0.), sigma(0.), ks(0.), dashpot(false),
         bsheet_model(false), repulsion(false), fix_boundary(fix_boundary_), shrink(false) {}
     mesh_param(double K_,double drag_,double B_,bool fix_boundary_) : K(K_), drag(drag_),
-        B(B_), kappa(0.), sigma(0.), sh_strength(0.), ks(0.), dashpot(true),
+        B(B_), kappa(0.), sigma(0.), ks(0.), dashpot(true),
         bsheet_model(false), repulsion(false), fix_boundary(fix_boundary_), shrink(false) {}
     mesh_param(double K_,double drag_,double B_,double kappa_,bool fix_boundary_) : K(K_), drag(drag_),
-        B(B_), kappa(kappa_), sigma(0.), sh_strength(0.), ks(0.), dashpot(true),
+        B(B_), kappa(kappa_), sigma(0.), ks(0.), dashpot(true),
         bsheet_model(true), repulsion(false), fix_boundary(fix_boundary_), shrink(false) {}
     mesh_param(double K_,double drag_,double kappa_,bool dashpot_,bool fix_boundary_) : K(K_), drag(drag_),
-        B(0.), kappa(kappa_), sigma(0.), sh_strength(0.), ks(0.), dashpot(dashpot_),
+        B(0.), kappa(kappa_), sigma(0.), ks(0.), dashpot(dashpot_),
         bsheet_model(false), repulsion(false), fix_boundary(fix_boundary_), shrink(false) {}
     mesh_param(double K_,double drag_,double B_,double kappa_) : K(K_), drag(drag_),
-        B(B_), kappa(kappa_), sigma(sqrt(3)), sh_strength(0.), ks(0.), dashpot(true),
+        B(B_), kappa(kappa_), sigma(sqrt(3)), ks(0.), dashpot(true),
         bsheet_model(true), repulsion(true), fix_boundary(false), shrink(false) {}
-	mesh_param(double K_, double drag_, double B_, double kappa_, bool fix_boundary_, bool shrink_, double sh_strength_, double ks_) : K(K_), drag(drag_),
-		B(B_), kappa(kappa_), sigma(0.), sh_strength(sh_strength_), ks(ks_), dashpot(true),
+	mesh_param(double K_, double drag_, double B_, double kappa_, bool fix_boundary_, bool shrink_, double ks_) : K(K_), drag(drag_),
+		B(B_), kappa(kappa_), sigma(0.), ks(ks_), dashpot(true),
 		bsheet_model(true), repulsion(false), fix_boundary(fix_boundary_), shrink(shrink_) {}
 };
 

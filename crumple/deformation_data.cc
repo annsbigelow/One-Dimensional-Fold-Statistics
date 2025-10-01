@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
 #include "mesh.hh"
 #include "common.hh"
@@ -16,6 +17,9 @@ int main(int argc,char **argv) {
 		return 1;
 	}
 
+	// Set dimensions of the mesh
+	int nx=100,ny=100; 
+
 	// Find output mode
 	int mode;
 	if(strcmp(argv[1],"0")==0) mode=0;
@@ -24,7 +28,7 @@ int main(int argc,char **argv) {
 	bool area=true;
 
 	// Read in the mesh
-	mesh_param par(0.5, 0.01, 0, 0.2, false, true, 0.0003, 0.001);
+	mesh_param par(0.5, 0.01, 0, 0.2, false, true, 0.001);
 	mesh *mp;
 
 	int fnum = atoi(argv[3]);
@@ -43,13 +47,32 @@ int main(int argc,char **argv) {
 		sprintf(f_pts, "%s/pts.%d", argv[2], fnum);
 		mp = new mesh(par, f_topo, f_pts);
 
+		double frac=.2;
+		//printf("num nodes:%d\n",mp->n);
+		/*int nx_int=floor((1-frac)*nx), ny_int=floor((1-frac)*ny);
+		int n_int=nx_int*ny_int+(ny_int>>1);
+		printf("num new nodes:%d\n", n_int);
+		if (mp->n!=nx*ny+(ny>>1)) printf("Error: rectangle dimensions mismatch.\n");
+		
+		 
+		// Choose a percentage of the nodes 
+		for(int i=0;i<mp->n;i++) for(int j=0;j<mp->n;j++) {
+				
+		}
+		mp_int = new mesh(par,topo_int,pts_int);
+		delete mp_int;
+		*/
+		FILE* fp = safe_fopen("tri.gnu", "wb");
+		mp->draw_mesh_gnuplot(fp);
+		fclose(fp);
+
 		// Print the standard deviation of z-coordinates of the nodes
-		printf("Roughness measure: %g\n", mp->sdev());
+		printf("Roughness measure: %g\n", mp->sdev(frac,nx,ny));
 
 		// Setup triangle info and print the sheet area
 		if(area) {
 			mp->setup_springs();
-			printf("Sheet area: %g\n", mp->tot_area());
+			printf("Sheet area: %g\n", mp->tot_area(frac,nx,ny));
 		}
 
 		delete mp;
@@ -63,13 +86,11 @@ int main(int argc,char **argv) {
 			sprintf(f_pts, "%s/pts.%d", argv[2], j);
 			mp=new mesh(par, f_topo, f_pts);
 
-			sdevs[j]=mp->sdev();
-			//printf("Std: %g\n",sdevs[j]);
+			sdevs[j]=mp->sdev(.2,nx,ny);
 
 			if (area) {
 				mp->setup_springs();
-				//printf("Sheet area: %g\n", mp->tot_area());
-				area_arr[j]=mp->tot_area();
+				area_arr[j]=mp->tot_area(.2,nx,ny);
 			}
 
 			delete mp;

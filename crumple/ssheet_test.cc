@@ -12,7 +12,7 @@ int main() {
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.5,0.01,0,0.2,false,true,0.0003,0.001);
+    mesh_param par(0.5,0.01,0,0.2,false,true,0.001);
 	//mesh_param par(0.2,0.02,0,0.2,false);
     mesh_rk4 mp(par,buf);
 
@@ -33,22 +33,8 @@ int main() {
         p[2]+=-0.1+0.02*exp(-0.1*(*p*(*p)+p[1]*p[1]));
 	}
 
-	// After initial displacement is applied, copy initial node positions in the
-	// presence of a shrinking substrate.
-	// And apply a random perturbation to the shrink strength of each contracting node.
-	if (mp.shrink) {
-		mp.sh_pts=new double[3*mp.n];
-		srand(2);
-		mp.shs=new double[3*mp.n];
-		double min_sh=mp.sh_strength-.00025, max_sh=mp.sh_strength+.0004;
-		double rfac=(max_sh-min_sh)/RAND_MAX;
-        // Use library function to copy data
-        //memcpy(mp.sh_pts,mp.pts,3*mp.n*sizeof(double));
-		for (int i=0;i<3*mp.n;i++) {
-			mp.sh_pts[i]=mp.pts[i];
-			mp.shs[i]=min_sh+rfac*static_cast<double>(rand());
-		}
-	}
+	// Copy initial positions and randomize shrink rates.
+	if (mp.shrink) mp.init_shrink(.0005,.002);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);
