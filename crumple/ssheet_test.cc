@@ -12,8 +12,7 @@ int main() {
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.5,0.01,0,0.2,false,true,0.001);
-	//mesh_param par(0.2,0.02,0,0.2,false);
+    mesh_param par(0.5,0.01,0,0.2,false,true,0.001,1.3);
     mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh

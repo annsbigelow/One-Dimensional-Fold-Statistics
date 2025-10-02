@@ -248,7 +248,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] out the mesh point accelerations (cumulative). */
 void mesh::contact_forces(double *in,double *out) {
     double *acc=out+3*n,K=100;
-    const double diam=2,diamsq=diam*diam,
+    const double diamsq=diam*diam,
                  screen=6,screensq=screen*screen;
 
     // Build the proximity grid data structure
@@ -717,8 +717,6 @@ double mesh::sdev(double frac,int nx,int ny) {
 	double *pt,mean=0,sd=0;
 	double *z=new double[n];
 
-	//int n_int = 
-
 	for(int i=0;i<n;i++) {
 		pt=pts+3*i; z[i]=pt[2];
 		mean+=z[i];
@@ -737,7 +735,8 @@ double mesh::sdev(double frac,int nx,int ny) {
 double mesh::tot_area(double frac,int nx,int ny) {
 	int *tp=to[0],i,j,k,l;
 	double A=0.,magn;
-	// Loop through all of the unique edges
+	// Loop through all of the unique edges.
+	// Some triangles may be double-counted here.
 	for(i=0;i<n;i++) while(tp<to[i+1]) {
 		j=*tp; k=tp[1], l=tp[2];
 
@@ -752,4 +751,40 @@ double mesh::tot_area(double frac,int nx,int ny) {
 		tp+=3;
 	}
 	return A;
+}
+
+
+/** Selects a rectangular subset of the current mesh
+*	for improved deformation statistics.
+*	Currently unfinished.
+*	\param[in] frac The percentage of the sheet edges to ignore.
+*	\param[in] nx,ny The dimensions of the sheet.
+*/
+void mesh::select_subsheet(double frac,int nx,int ny) {
+	if (n != nx * ny + (ny >> 1)) {
+		printf("Error: rectangle dimensions mismatch.\n");
+		return;
+	}
+	int nx_int = floor((1 - frac) * nx), ny_int = floor((1 - frac) * ny);
+	int n_int = nx_int * ny_int + (ny_int >> 1);
+	printf("num new nodes: %d\n", n_int);
+	
+	double *pts_int = new double[3*n_int];
+	for (int i = 0; i < ny_int+(ny_int>>1); i++) for (int j = 0; j < nx_int; j++) {
+		pts_int[i * nx_int + j] = pts[i * nx_int + j];
+	}
+
+	FILE* fp2 = safe_fopen("subrec.gnu", "wb");
+	// Loop through all of the unique edges. 
+	// There's an error here because edges are double-counted, I think.
+	int* tp = to[0], i, j, k, l;
+	for (i = 0; i < n_int; i++) while (tp < to[i + 1]) {
+		j = *tp; k = tp[1], l = tp[2];
+		double* ii = pts + 3 * i, * ij = pts + 3 * j, * ik = pts + 3 * k, * il = pts + 3 * l; 
+		fprintf(fp2,"%g %g %g\n%g %g %g\n %g %g %g\n %g %g %g\n",*ii,ii[1],ii[2], *ij, ij[1], ij[2], *ik, ik[1], ik[2], *il, il[1], il[2]);
+		tp += 3;
+	}
+	fclose(fp2);
+
+	delete [] pts_int;
 }

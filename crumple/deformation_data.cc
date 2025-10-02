@@ -28,7 +28,7 @@ int main(int argc,char **argv) {
 	bool area=true;
 
 	// Read in the mesh
-	mesh_param par(0.5, 0.01, 0, 0.2, false, true, 0.001);
+	mesh_param par(0.5,0.01,0,0.2,false,true,0.001,1.3);
 	mesh *mp;
 
 	int fnum = atoi(argv[3]);
@@ -48,23 +48,9 @@ int main(int argc,char **argv) {
 		mp = new mesh(par, f_topo, f_pts);
 
 		double frac=.2;
-		//printf("num nodes:%d\n",mp->n);
-		/*int nx_int=floor((1-frac)*nx), ny_int=floor((1-frac)*ny);
-		int n_int=nx_int*ny_int+(ny_int>>1);
-		printf("num new nodes:%d\n", n_int);
-		if (mp->n!=nx*ny+(ny>>1)) printf("Error: rectangle dimensions mismatch.\n");
-		
-		 
 		// Choose a percentage of the nodes 
-		for(int i=0;i<mp->n;i++) for(int j=0;j<mp->n;j++) {
-				
-		}
-		mp_int = new mesh(par,topo_int,pts_int);
-		delete mp_int;
-		*/
-		FILE* fp = safe_fopen("tri.gnu", "wb");
-		mp->draw_mesh_gnuplot(fp);
-		fclose(fp);
+		//mp->setup_springs();
+		//mp->select_subsheet(frac,nx,ny);
 
 		// Print the standard deviation of z-coordinates of the nodes
 		printf("Roughness measure: %g\n", mp->sdev(frac,nx,ny));

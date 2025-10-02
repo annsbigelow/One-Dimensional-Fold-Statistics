@@ -89,6 +89,7 @@ class mesh : public mesh_param {
         void add(ext_potential *ep);
 		double sdev(double frac,int nx,int ny);
 		double tot_area(double frac,int nx,int ny);
+		void select_subsheet(double frac, int nx, int ny);
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
