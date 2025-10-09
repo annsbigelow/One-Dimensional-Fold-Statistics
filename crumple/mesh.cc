@@ -46,6 +46,8 @@ mesh::~mesh() {
     delete [] pts;
 	delete [] sh_pts;
 	delete [] shs;
+	delete [] kss;
+	delete [] kappas;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -198,14 +200,24 @@ void mesh::reset_relaxed() {
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
 *	\param[in] min_sh the minimum rate to sample from.
+*	\param[in] min_ks the minimum spring constant to sample from.
 */
-void mesh::init_shrink(double min_sh,double max_sh) {
-	sh_pts = new double[3*n];
-	srand(2);
-	shs=new double[n];
-	double rfac=(max_sh-min_sh)/RAND_MAX;
+void mesh::init_shrink(double min_sh,double max_sh,double min_ks,double max_ks) {
+	srand(22);
+	double sfac=(max_sh-min_sh)/RAND_MAX, kfac=(max_ks-min_ks)/RAND_MAX, kapfac=(.2-.05)/RAND_MAX;
+	sh_pts=new double[3*n];
+	double *rands=new double[n]; shs=new double[n]; kss=new double[n]; kappas=new double[n];
+	
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
-	for (int i=0;i<n;i++) shs[i]=min_sh+rfac*static_cast<double>(rand());
+	for (int i=0;i<n;i++) {
+		// Use the same random numbers to set the shrink rates and spring constants.
+		rands[i]=static_cast<double>(rand());
+		shs[i]=min_sh+sfac*rands[i];
+		kss[i]=shs[i];
+		kappas[i]=.2-.05+kapfac*rands[i];
+		//kss[i]=min_ks+kfac*rands[i]; // Sample range is identical, for now, for shrink springs and rates.
+	}
+	delete [] rands;
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -254,7 +266,6 @@ void mesh::contact_forces(double *in,double *out) {
     // Build the proximity grid data structure
     pg.setup(in,n);
     pg.populate(in,n);
-    //int fullcount=0,count=0;
 
     // Loop over all of the balls in the simulation
     for(int i=0;i<n;i++) {
@@ -285,7 +296,6 @@ void mesh::contact_forces(double *in,double *out) {
                                ex=q[0]-r[0],
                                ey=q[1]-r[1],
                                ez=q[2]-r[2];
-                        //fullcount++;
 
                         // If the points are far away from each other in the
                         // mesh coordinates, then apply a contact force
@@ -298,14 +308,12 @@ void mesh::contact_forces(double *in,double *out) {
                             acc[3*i2]-=dx;
                             acc[3*i2+1]-=dy;
                             acc[3*i2+2]-=dz;
-                            //count++;
                         }
                     }
                 }
             }
         }
     }
-    //printf("%d total, %d real\n",fullcount,count);
 }
 
 /** Computes the acceleration due to springs and external potentials.
@@ -616,7 +624,7 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
            rs=sf/sqrt(dx*dx+dy*dy+dz*dz)-1;
 
     // Add the force contributions to the two vertices
-    dx*=rs*K;dy*=rs*K;dz*=rs*K;
+	dx*=rs*K;dy*=rs*K;dz*=rs*K;
     *ai+=dx;ai[1]+=dy;ai[2]+=dz;
     *ak-=dx;ak[1]-=dy;ak[2]-=dz;
 }
@@ -630,6 +638,7 @@ void mesh::shrink_force(double fac,double *in, double *acc, int i) {
 			*ai=acc+3*i;
 
 	// Add the force contributions to the vertex
+	//dx*=kss[i];dy*=kss[i];dz*=kss[i];
 	dx*=ks;dy*=ks;dz*=ks;
 	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
 }
@@ -682,6 +691,7 @@ void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef) 
     nf=1./mod_sq(f);
 
     // Compute forces on the four vertices
+	//fac=sqrt(3)/2*kappas[i]*ef*sqrt(ne*nf);sp=dot(e,f);
     fac=sqrt(3)/2*kappa*ef*sqrt(ne*nf);sp=dot(e,f);
     u=fac*(f-ne*sp*e);
     v=fac*(nf*sp*f-e);

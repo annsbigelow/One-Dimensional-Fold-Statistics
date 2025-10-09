@@ -33,7 +33,7 @@ int main() {
 	}
 
 	// Copy initial positions and randomize shrink rates.
-	if (mp.shrink) mp.init_shrink(.0005,.002);
+	if (mp.shrink) mp.init_shrink(.0001,.002,.0001,.002);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);
@@ -48,5 +48,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 250);
+	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 200);
 }
