@@ -12,7 +12,7 @@ int main() {
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.5,0.01,0,0.2,false,true,0.001,1.3);
+    mesh_param par(0.5,0.01,0,0.2,false,true,1.3);
     mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh
@@ -33,7 +33,7 @@ int main() {
 	}
 
 	// Copy initial positions and randomize shrink rates.
-	if (mp.shrink) mp.init_shrink(.0001,.002,.0001,.002);
+	if (mp.shrink) mp.init_shrink(.00005,.002);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);

@@ -40,14 +40,20 @@ class mesh : public mesh_param {
         ext_potential* ex_pot[max_ep];
         /** The node positions. */
         double *pts;
+		/** Whether to use random shrink spring constants or not. */
+		bool rand_sh;
+		/** Whether to use random bend spring constants or not. */
+		bool rand_b;
+		/** Whether to use random stretch spring constants or not. */
+		bool rand_st;
 		/** The contracting node positions. */
 		double *sh_pts;
 		/** The shrink strengths for each node. */
 		double *shs;
-		/** The spring constants for each shrinking node. */
-		double *kss;
 		/** The bend spring constants for each node. */
 		double *kappas;
+		/** The stretch spring constants for each node. */
+		double *kss;
         /** The node velocities. */
         double *vel;
         /** The number of connections by node. */
@@ -71,7 +77,7 @@ class mesh : public mesh_param {
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
-		void init_shrink(double min_sh,double max_sh,double min_ks,double max_ks);
+		void init_shrink(double min_sh,double max_sh);
         void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);

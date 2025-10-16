@@ -45,9 +45,9 @@ mesh::~mesh() {
     delete [] ncn;
     delete [] pts;
 	delete [] sh_pts;
-	delete [] shs;
-	delete [] kss;
-	delete [] kappas;
+	if(rand_sh) delete [] shs;
+	if(rand_b) delete [] kappas;
+	if(rand_st) delete [] kss;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -200,24 +200,23 @@ void mesh::reset_relaxed() {
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
 *	\param[in] min_sh the minimum rate to sample from.
-*	\param[in] min_ks the minimum spring constant to sample from.
 */
-void mesh::init_shrink(double min_sh,double max_sh,double min_ks,double max_ks) {
+void mesh::init_shrink(double min_sh,double max_sh) {
 	srand(22);
-	double sfac=(max_sh-min_sh)/RAND_MAX, kfac=(max_ks-min_ks)/RAND_MAX, kapfac=(.2-.05)/RAND_MAX;
-	sh_pts=new double[3*n];
-	double *rands=new double[n]; shs=new double[n]; kss=new double[n]; kappas=new double[n];
+	// This could be organized nicely. Sample bounds and rand flags could be set elsewhere.
+	rand_sh=true;rand_b=false;rand_st=true;
+	double sfac=(max_sh-min_sh)/RAND_MAX, kapfac=(.2-.05)/RAND_MAX, ksfac=(.8-.25)/RAND_MAX, x;  
+	sh_pts=new double[3*n]; shs=new double[n]; 
+	kappas=new double[n]; kss=new double[n];
 	
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	for (int i=0;i<n;i++) {
 		// Use the same random numbers to set the shrink rates and spring constants.
-		rands[i]=static_cast<double>(rand());
-		shs[i]=min_sh+sfac*rands[i];
-		kss[i]=shs[i];
-		kappas[i]=.2-.05+kapfac*rands[i];
-		//kss[i]=min_ks+kfac*rands[i]; // Sample range is identical, for now, for shrink springs and rates.
+		x=static_cast<double>(rand());
+		if(rand_sh) shs[i]=min_sh+sfac*x;
+		if(rand_b) kappas[i]=.2-kapfac*x; 
+		if(rand_st) kss[i]=.8-ksfac*x;
 	}
-	delete [] rands;
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -624,7 +623,12 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
            rs=sf/sqrt(dx*dx+dy*dy+dz*dz)-1;
 
     // Add the force contributions to the two vertices
-	dx*=rs*K;dy*=rs*K;dz*=rs*K;
+	if(rand_st) {
+		dx*=rs*kss[i];dy*=rs*kss[i];dz*=rs*kss[i];
+	}
+	else {
+		dx*=rs*K;dy*=rs*K;dz*=rs*K;
+	}
     *ai+=dx;ai[1]+=dy;ai[2]+=dz;
     *ak-=dx;ak[1]-=dy;ak[2]-=dz;
 }
@@ -638,8 +642,12 @@ void mesh::shrink_force(double fac,double *in, double *acc, int i) {
 			*ai=acc+3*i;
 
 	// Add the force contributions to the vertex
-	//dx*=kss[i];dy*=kss[i];dz*=kss[i];
-	dx*=ks;dy*=ks;dz*=ks;
+	if(rand_sh) {
+		dx *= shs[i]; dy *= shs[i]; dz *= shs[i];
+	}
+	else {
+		dx*=ks;dy*=ks;dz*=ks;
+	}
 	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
 }
 
@@ -691,8 +699,12 @@ void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef) 
     nf=1./mod_sq(f);
 
     // Compute forces on the four vertices
-	//fac=sqrt(3)/2*kappas[i]*ef*sqrt(ne*nf);sp=dot(e,f);
-    fac=sqrt(3)/2*kappa*ef*sqrt(ne*nf);sp=dot(e,f);
+	if(rand_b) {
+		fac=sqrt(3)/2*kappas[i]*ef*sqrt(ne*nf);sp=dot(e,f);
+	}
+	else {
+		fac=sqrt(3)/2*kappa*ef*sqrt(ne*nf);sp=dot(e,f);
+	}
     u=fac*(f-ne*sp*e);
     v=fac*(nf*sp*f-e);
     a1=c*u;

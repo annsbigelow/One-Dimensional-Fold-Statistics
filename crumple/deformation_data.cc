@@ -28,7 +28,7 @@ int main(int argc,char **argv) {
 	bool area=true;
 
 	// Read in the mesh
-	mesh_param par(0.5,0.01,0,0.2,false,true,0.001,1.3);
+	mesh_param par(0.5,0.01,0,0.2,false,true,1.3);
 	mesh *mp;
 
 	int fnum = atoi(argv[3]);
