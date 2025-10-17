@@ -3,6 +3,8 @@
 #include "mesh.hh"
 #include "vec3.hh"
 
+#include <gsl/gsl_randist.h>
+
 /** The constructor reads in a mesh from a file, and sets up the vertices and
  * edge tables.
  * \param[in] mp a mesh_param structure containing simulation constants.
@@ -13,6 +15,9 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
     read_topology(fp);
     read_positions(fp);
     fclose(fp);
+
+	// Seed the RNG
+	if(shrink) { rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22); }
 }
 
 /** The constructor reads in mesh topology and vertex positions from separate
@@ -32,6 +37,10 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
     fp=safe_fopen(f_pts,"rb");
     read_positions(fp);
     fclose(fp);
+
+	// Seed the RNG
+
+	if(shrink) { rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22);}
 }
 
 /** The class destructor frees the dynamically allocated memory. */
@@ -44,10 +53,14 @@ mesh::~mesh() {
     delete [] edm;delete [] ed;
     delete [] ncn;
     delete [] pts;
-	delete [] sh_pts;
-	if(rand_sh) delete [] shs;
-	if(rand_b) delete [] kappas;
-	if(rand_st) delete [] kss;
+
+	if(shrink){
+		delete[] sh_pts;
+		if (rand_sh) delete[] shs;
+		if (rand_b) delete[] kappas;
+		if (rand_st) delete[] kss;
+		gsl_rng_free(rng);
+	}
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -199,19 +212,22 @@ void mesh::reset_relaxed() {
 
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
-*	\param[in] min_sh the minimum rate to sample from.
+*	\param[in] min_sh the minimum shrink spring constant.
 */
 void mesh::init_shrink(double min_sh,double max_sh) {
 	srand(22);
 	// This could be organized nicely. Sample bounds and rand flags could be set elsewhere.
-	rand_sh=true;rand_b=false;rand_st=true;
+	rand_sh=true;rand_b=true;rand_st=true;
 	double sfac=(max_sh-min_sh)/RAND_MAX, kapfac=(.2-.05)/RAND_MAX, ksfac=(.8-.25)/RAND_MAX, x;  
 	sh_pts=new double[3*n]; shs=new double[n]; 
 	kappas=new double[n]; kss=new double[n];
 	
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	for (int i=0;i<n;i++) {
-		// Use the same random numbers to set the shrink rates and spring constants.
+		// Below two lines will be dealt with by Ann soon.
+		double mu = .5, sigma = .2;
+		double rand_val = mu + gsl_ran_gaussian_ziggurat(rng, sigma);
+
 		x=static_cast<double>(rand());
 		if(rand_sh) shs[i]=min_sh+sfac*x;
 		if(rand_b) kappas[i]=.2-kapfac*x; 
@@ -379,11 +395,8 @@ void mesh::accel_rbsheet(double t_,double *in,double *acc) {
 
 	// next add in shrink forces.
 	if (shrink) {
-        //double fac=exp(-0.001*t_);
-		for(i=0;i<n;i++) {
-			double lam=shs[i], fac=exp(-lam*t_);
-			shrink_force(fac,in,acc,i);
-		}
+        double fac=exp(-0.001*t_);
+		for(i=0;i<n;i++) shrink_force(fac,in,acc,i);
 	}
 }
 
@@ -635,7 +648,7 @@ void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
 
 /** Calculates the acceleration due to the contraction of nodes
  * towards the centroid. */
-void mesh::shrink_force(double fac,double *in, double *acc, int i) {
+void mesh::shrink_force(double fac,double *in,double *acc,int i) {
 	// Define "springs" between shrinking points and current nodes
 	double *is=sh_pts+3*i, *ip=in+3*i,
 			dx=*is*fac-*ip, dy=is[1]*fac-ip[1], dz=is[2]*fac-ip[2],
@@ -643,7 +656,7 @@ void mesh::shrink_force(double fac,double *in, double *acc, int i) {
 
 	// Add the force contributions to the vertex
 	if(rand_sh) {
-		dx *= shs[i]; dy *= shs[i]; dz *= shs[i];
+		dx*=shs[i]; dy*=shs[i]; dz*=shs[i];
 	}
 	else {
 		dx*=ks;dy*=ks;dz*=ks;

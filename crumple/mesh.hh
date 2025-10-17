@@ -11,6 +11,7 @@
 #include "ext_potential.hh"
 #include "p_grid.hh"
 
+#include <gsl/gsl_rng.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_multimin.h>
 
@@ -54,6 +55,8 @@ class mesh : public mesh_param {
 		double *kappas;
 		/** The stretch spring constants for each node. */
 		double *kss;
+		/** GSL RNG */
+		gsl_rng* rng;
         /** The node velocities. */
         double *vel;
         /** The number of connections by node. */
