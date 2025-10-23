@@ -39,8 +39,7 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
     fclose(fp);
 
 	// Seed the RNG
-
-	if(shrink) { rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22);}
+	if(shrink) {rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22);}
 }
 
 /** The class destructor frees the dynamically allocated memory. */
@@ -54,11 +53,8 @@ mesh::~mesh() {
     delete [] ncn;
     delete [] pts;
 
-	if(shrink){
-		delete[] sh_pts;
-		if (rand_sh) delete[] shs;
-		if (rand_b) delete[] kappas;
-		if (rand_st) delete[] kss;
+	if(shrink){ 
+		delete[] shs; delete[] kappas; delete[] kss;
 		gsl_rng_free(rng);
 	}
 }
@@ -212,27 +208,16 @@ void mesh::reset_relaxed() {
 
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
-*	\param[in] min_sh the minimum shrink spring constant.
+*	\param[in] shflag, bendflag, stflag: Flags setting the choices to use random spring constants.
 */
-void mesh::init_shrink(double min_sh,double max_sh) {
-	srand(22);
-	// This could be organized nicely. Sample bounds and rand flags could be set elsewhere.
-	rand_sh=true;rand_b=true;rand_st=true;
-	double sfac=(max_sh-min_sh)/RAND_MAX, kapfac=(.2-.05)/RAND_MAX, ksfac=(.8-.25)/RAND_MAX, x;  
-	sh_pts=new double[3*n]; shs=new double[n]; 
-	kappas=new double[n]; kss=new double[n];
-	
+void mesh::init_shrink(bool shflag,bool bendflag,bool stflag) {
+	sh_pts=new double[3*n]; shs=new double[n]; kappas=new double[n]; kss=new double[n];
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
-	for (int i=0;i<n;i++) {
-		// Below two lines will be dealt with by Ann soon.
-		double mu = .5, sigma = .2;
-		double rand_val = mu + gsl_ran_gaussian_ziggurat(rng, sigma);
-
-		x=static_cast<double>(rand());
-		if(rand_sh) shs[i]=min_sh+sfac*x;
-		if(rand_b) kappas[i]=.2-kapfac*x; 
-		if(rand_st) kss[i]=.8-ksfac*x;
-	}
+	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
+	
+	if(rand_sh) log_normal(shs,.0004,.0001);
+	if(rand_b) log_normal(kappas,.1,.05);
+	if(rand_st) log_normal(kss,.5,.1);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -789,8 +774,7 @@ double mesh::tot_area(double frac,int nx,int ny) {
 }
 
 
-/** Selects a rectangular subset of the current mesh
-*	for improved deformation statistics.
+/** Selects a rectangular subset of the current mesh for improved deformation statistics.
 *	Currently unfinished.
 *	\param[in] frac The percentage of the sheet edges to ignore.
 *	\param[in] nx,ny The dimensions of the sheet.
@@ -822,4 +806,18 @@ void mesh::select_subsheet(double frac,int nx,int ny) {
 	fclose(fp2);
 
 	delete [] pts_int;
+}
+
+/** Fills an array with n log-normally distributed values.
+*	\param[in] spring_params the array to fill.
+*	\param[in] m the mean of the log-normal distribution.
+*	\param[in] s the standard deviation of the log-normal distribution.
+*/
+void mesh::log_normal(double *spring_params,double m,double s) {
+	double mm=m*m, ss=s*s;
+	double mu=log(mm/sqrt(ss+mm)), sig=sqrt(log(ss/mm+1));
+	for (int i=0;i<n;i++) {
+		double x=mu+gsl_ran_gaussian_ziggurat(rng,sig);
+		spring_params[i]=exp(x);
+	}
 }

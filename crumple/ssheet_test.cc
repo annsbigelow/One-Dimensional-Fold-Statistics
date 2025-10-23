@@ -32,8 +32,8 @@ int main() {
         p[2]+=-0.1+0.02*exp(-0.1*(*p*(*p)+p[1]*p[1]));
 	}
 
-	// Copy initial positions and randomize shrink rates.
-	if (mp.shrink) mp.init_shrink(.00005,.002);
+	// Copy initial positions and randomize spring constants.
+	if (mp.shrink) mp.init_shrink(true,true,true);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);
