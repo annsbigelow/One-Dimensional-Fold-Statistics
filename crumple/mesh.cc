@@ -210,14 +210,15 @@ void mesh::reset_relaxed() {
 *	a random perturbation to the rate of each contracting node.
 *	\param[in] shflag, bendflag, stflag: Flags setting the choices to use random spring constants.
 */
-void mesh::init_shrink(bool shflag,bool bendflag,bool stflag) {
+void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,int nx,int ny) {
 	sh_pts=new double[3*n]; shs=new double[n]; kappas=new double[n]; kss=new double[n];
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
-	
-	if(rand_sh) log_normal(shs,.0004,.0001);
-	if(rand_b) log_normal(kappas,.1,.05);
-	if(rand_st) log_normal(kss,.5,.1);
+
+	double l=1.,h=1.;
+	if(rand_sh) gen_spring_params(shs,.0004,.0001,l,h,nx,ny);
+	if(rand_b) gen_spring_params(kappas,.1,.05,l,h,nx,ny);
+	if(rand_st) gen_spring_params(kss,.5,.1,l,h,nx,ny);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -808,16 +809,91 @@ void mesh::select_subsheet(double frac,int nx,int ny) {
 	delete [] pts_int;
 }
 
-/** Fills an array with n log-normally distributed values.
-*	\param[in] spring_params the array to fill.
+/** Fills an array with n log-normally distributed values after using a Gaussian filter.
+*	Valid for a mesh with regular hexagonal topology.
 *	\param[in] m the mean of the log-normal distribution.
 *	\param[in] s the standard deviation of the log-normal distribution.
+*	\param[in] l the fixed length scale of random features.
+*	\param[in] h the predetermined side edge length of the elements.
+*	\param[in] nx,ny the dimensions of the mesh.
+*	\return the array of random, filtered values.
 */
-void mesh::log_normal(double *spring_params,double m,double s) {
-	double mm=m*m, ss=s*s;
-	double mu=log(mm/sqrt(ss+mm)), sig=sqrt(log(ss/mm+1));
-	for (int i=0;i<n;i++) {
-		double x=mu+gsl_ran_gaussian_ziggurat(rng,sig);
-		spring_params[i]=exp(x);
+void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int nx,int ny) {
+	double mm=m*m,ss=s*s;
+	double mu=0.,sig=0.,sig_smooth2=l*l/(h*h),val;
+	int R=static_cast<int>(std::ceil(l/h)); // May throw error for ceil // Support of the filter
+	int i,g=0;
+
+	// Calculate filter weights. Each weight is applied to an entire support layer.
+	double* weights=new double[R+1];
+	double norm=0.,sum=0.;
+	// Loop through neighbor layers, starting with closest hexagonal layer
+	for (i=0;i<=R;i++) {
+		weights[i]=exp(-(static_cast<double>(i)*i)/(2*sig_smooth2));
+		norm+=weights[i];
 	}
+	// Normalize the weights and sum the squares
+	for (i=0;i<=R;i++) {
+		weights[i]/=norm;
+		sum+=weights[i]*weights[i];
+	}
+	mu=log(mm/sqrt(ss+mm));
+	sig=sqrt(log(ss/mm+1)/sum);
+
+	// Generate grid of normal values
+	double *in=new double[n];
+	for (i=0;i<n;i++) {
+		in[i]=mu+gsl_ran_gaussian_ziggurat(rng,sig);
+	}
+
+	// Apply the Gaussian filter to interior nodes
+	std::memcpy(out,in,n*sizeof(double));
+	int* seen=new int[n];
+	for (i=0;i<n;i++) seen[i]=-1;
+	int visit=0;
+	int nn=3*R*(R+1)+1,cct,nct,nt; // Total number of support nodes
+	int* cpts=new int[nn]; int* npts=new int[nn]; // Current and next layers
+	for (int j=0;j<ny;j++) { // Loop through interior nodes
+		nt=nx+(j&1);
+		for (i=0;i<nt;i++,g++) {
+			if(i>R-1&&i<nt-R&&j>R-1&&j<ny-R){
+				// Loop through layers of neighbors
+				cct=0; nct=0;
+
+				// Layer 0: focus node
+				visit++;
+				seen[g]=visit; cpts[cct++]=g;
+				val=weights[0]*in[g];
+				// Neighbor layers	
+				for (int layer=1;layer<=R;layer++) {
+					nct=0;
+					// Cycle through current layer
+					for (int ci=0;ci<cct;ci++) {
+						int v=cpts[ci];
+						// Neighbors of points in current layer
+						for (int* p=ed[v];p<ed[v+1];p++) {
+							int u=*p;
+							// Only count contributions of unvisited neighbors
+							if (seen[u]!=visit) {
+								seen[u]=visit; npts[nct++]=u;
+								val+=weights[layer]*in[u];
+							}
+						}
+					}
+					// Move to next layer
+					cct=nct;
+					int* tmp=cpts; cpts=npts; npts=tmp;
+					// Break if there are no new neighbors
+					if (cct==0) break;
+				}
+				out[g]=val;
+			}
+		}
+	}
+
+	for (i=0;i<n;i++) out[i]=exp(out[i]);
+	delete [] cpts; delete[] npts;
+	delete [] seen;
+	delete [] weights;
+	delete [] in;
 }

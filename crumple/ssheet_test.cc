@@ -7,7 +7,7 @@
 int main() {
 
     // Read in the mesh
-    int len=100;
+    int len=10;
     int inc=20;
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
@@ -33,7 +33,7 @@ int main() {
 	}
 
 	// Copy initial positions and randomize spring constants.
-	if (mp.shrink) mp.init_shrink(true,true,true);
+	if (mp.shrink) mp.init_shrink(true,true,true,len,len);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);
