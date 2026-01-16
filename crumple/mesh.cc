@@ -215,8 +215,8 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,int nx,int ny) {
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
 
-	double l=1.,h=1.;
-	if(rand_sh) gen_spring_params(shs,.0004,.0001,l,h,nx,ny);
+	double l=1.,h=1.; // Ensure that the side edge length is consistent here
+	if(rand_sh) gen_spring_params(shs,.005,.001,l,h,nx,ny);
 	if(rand_b) gen_spring_params(kappas,.1,.05,l,h,nx,ny);
 	if(rand_st) gen_spring_params(kss,.5,.1,l,h,nx,ny);
 }
@@ -821,12 +821,12 @@ void mesh::select_subsheet(double frac,int nx,int ny) {
 void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int nx,int ny) {
 	double mm=m*m,ss=s*s;
 	double mu=0.,sig=0.,sig_smooth2=l*l/(h*h),val;
-	int R=static_cast<int>(std::ceil(l/h)); // May throw error for ceil // Support of the filter
+	int R=static_cast<int>(std::ceil(l/h)); // Support of the filter
 	int i,g=0;
 
 	// Calculate filter weights. Each weight is applied to an entire support layer.
 	double* weights=new double[R+1];
-	double norm=0.,sum=0.;
+	double norm=0.,sum=0.,sum2=0.,A,B;
 	// Loop through neighbor layers, starting with closest hexagonal layer
 	for (i=0;i<=R;i++) {
 		weights[i]=exp(-(static_cast<double>(i)*i)/(2*sig_smooth2));
@@ -835,23 +835,24 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 	// Normalize the weights and sum the squares
 	for (i=0;i<=R;i++) {
 		weights[i]/=norm;
-		sum+=weights[i]*weights[i];
+		sum+=i*weights[i];
+		sum2+=i*weights[i]*weights[i];
 	}
-	mu=log(mm/sqrt(ss+mm));
-	sig=sqrt(log(ss/mm+1)/sum);
+	A=weights[0]+(6*sum);
+	B=(weights[0]*weights[0])+(6*sum2);
+	mu=log(mm/sqrt(ss+mm))/A;
+	sig=sqrt(log(ss/mm+1)/B);
 
 	// Generate grid of normal values
 	double *in=new double[n];
-	for (i=0;i<n;i++) {
-		in[i]=mu+gsl_ran_gaussian_ziggurat(rng,sig);
-	}
+	for (i=0;i<n;i++) in[i]=mu+gsl_ran_gaussian_ziggurat(rng,sig);
 
 	// Apply the Gaussian filter to interior nodes
 	std::memcpy(out,in,n*sizeof(double));
 	int* seen=new int[n];
 	for (i=0;i<n;i++) seen[i]=-1;
 	int visit=0;
-	int nn=3*R*(R+1)+1,cct,nct,nt; // Total number of support nodes
+	int nn=3*R*(R+1)+1,cct,nct,nt; 
 	int* cpts=new int[nn]; int* npts=new int[nn]; // Current and next layers
 	for (int j=0;j<ny;j++) { // Loop through interior nodes
 		nt=nx+(j&1);
@@ -859,7 +860,6 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 			if(i>R-1&&i<nt-R&&j>R-1&&j<ny-R){
 				// Loop through layers of neighbors
 				cct=0; nct=0;
-
 				// Layer 0: focus node
 				visit++;
 				seen[g]=visit; cpts[cct++]=g;
@@ -890,8 +890,11 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 			}
 		}
 	}
-
-	for (i=0;i<n;i++) out[i]=exp(out[i]);
+	for (i=0;i<n;i++) {
+		out[i]=exp(out[i]);
+		printf("%g\n",out[i]);
+	}
+	printf("\n");
 	delete [] cpts; delete[] npts;
 	delete [] seen;
 	delete [] weights;

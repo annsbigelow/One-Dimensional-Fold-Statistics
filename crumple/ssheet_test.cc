@@ -48,5 +48,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 200);
+	//mp.solve_adaptive(1000, 1e-3, 1e-3, false, 100);
 }
