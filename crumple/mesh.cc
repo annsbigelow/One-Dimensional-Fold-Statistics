@@ -216,9 +216,9 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,int nx,int ny) {
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
 
 	double l=1.,h=1.; // Ensure that the side edge length is consistent here
-	if(rand_sh) gen_spring_params(shs,.005,.001,l,h,nx,ny);
-	if(rand_b) gen_spring_params(kappas,.1,.05,l,h,nx,ny);
-	if(rand_st) gen_spring_params(kss,.5,.1,l,h,nx,ny);
+	if(rand_sh) gen_spring_params(shs,.0009,.0001,l,h,nx,ny);
+	if(rand_b) gen_spring_params(kappas,.1,.06,l,h,nx,ny);
+	if(rand_st) gen_spring_params(kss,.5,.2,l,h,nx,ny);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -854,7 +854,7 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 	int visit=0;
 	int nn=3*R*(R+1)+1,cct,nct,nt; 
 	int* cpts=new int[nn]; int* npts=new int[nn]; // Current and next layers
-	for (int j=0;j<ny;j++) { // Loop through interior nodes
+	for (int j=0;j<ny;j++) {
 		nt=nx+(j&1);
 		for (i=0;i<nt;i++,g++) {
 			if(i>R-1&&i<nt-R&&j>R-1&&j<ny-R){
@@ -863,11 +863,10 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 				// Layer 0: focus node
 				visit++;
 				seen[g]=visit; cpts[cct++]=g;
-				val=weights[0]*in[g];
-				// Neighbor layers	
+				val=weights[0]*in[g];	
 				for (int layer=1;layer<=R;layer++) {
 					nct=0;
-					// Cycle through current layer
+					// Current layer
 					for (int ci=0;ci<cct;ci++) {
 						int v=cpts[ci];
 						// Neighbors of points in current layer
@@ -880,21 +879,22 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 							}
 						}
 					}
-					// Move to next layer
 					cct=nct;
 					int* tmp=cpts; cpts=npts; npts=tmp;
-					// Break if there are no new neighbors
+					// If there are no new neighbors
 					if (cct==0) break;
 				}
 				out[g]=val;
 			}
+			// The edges are unfiltered but will still be Lognormal
+			else out[g]=mu*A+gsl_ran_gaussian_ziggurat(rng,s*sqrt(B));
 		}
 	}
 	for (i=0;i<n;i++) {
 		out[i]=exp(out[i]);
-		printf("%g\n",out[i]);
+		//printf("%g\n",out[i]);
 	}
-	printf("\n");
+	//printf("\n");
 	delete [] cpts; delete[] npts;
 	delete [] seen;
 	delete [] weights;

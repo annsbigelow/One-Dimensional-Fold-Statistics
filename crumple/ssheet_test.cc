@@ -7,7 +7,7 @@
 int main() {
 
     // Read in the mesh
-    int len=10;
+    int len=100;
     int inc=20;
     char buf[128];
     sprintf(buf,"sheet_%dx%d.bin",len,len);
@@ -48,5 +48,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	//mp.solve_adaptive(1000, 1e-3, 1e-3, false, 100);
+	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 200);
 }
