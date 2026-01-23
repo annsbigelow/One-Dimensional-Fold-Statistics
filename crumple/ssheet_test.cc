@@ -7,12 +7,13 @@
 int main() {
 
     // Read in the mesh
-    int len=100;
+    int len=10;
+	double s=10.;
     int inc=20;
     char buf[128];
-    sprintf(buf,"sheet_%dx%d.bin",len,len);
+    sprintf(buf,"sheet_%g_%dx%d.bin",s,len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.5,0.01,0,0.2,false,true,1.3);
+    mesh_param par(0.5,0.01,0,0.2,false,true,1.3,s);
     mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh
@@ -48,5 +49,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 200);
+	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 100);
 }

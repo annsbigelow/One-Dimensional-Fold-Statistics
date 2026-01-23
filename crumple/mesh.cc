@@ -39,7 +39,9 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
     fclose(fp);
 
 	// Seed the RNG
-	if(shrink) {rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22);}
+	if(shrink) {
+		rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22);
+	}
 }
 
 /** The class destructor frees the dynamically allocated memory. */
@@ -159,6 +161,11 @@ void mesh::setup_springs() {
         to[n]=top;
         //printf("%d %d\n",nh,ct);
     }
+	if(shrink) {
+		set_scale=1.;
+		double h=static_cast<double>(sed);
+		R = static_cast<int>(std::ceil(set_scale / h));
+	}
 }
 
 /** Perturbs the rest lengths of the springs by uniform random numbers
@@ -215,10 +222,9 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,int nx,int ny) {
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
 
-	double l=1.,h=1.; // Ensure that the side edge length is consistent here
-	if(rand_sh) gen_spring_params(shs,.0009,.0001,l,h,nx,ny);
-	if(rand_b) gen_spring_params(kappas,.1,.06,l,h,nx,ny);
-	if(rand_st) gen_spring_params(kss,.5,.2,l,h,nx,ny);
+	if(rand_sh) gen_spring_params(shs,.0009,.0001,nx,ny);
+	if(rand_b) gen_spring_params(kappas,.1,.06,nx,ny);
+	if(rand_st) gen_spring_params(kss,.5,.2,nx,ny);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -731,10 +737,9 @@ void mesh::add(ext_potential *ep) {
 
 /** Calculates the standard deviation of the z-coordinates of the sheet nodes
 	as a measure of deformation. 
-*	\param[in] frac The percentage of the sheet edges to ignore.
-*	\param[in] nx The length dimension of the sheet.
+*	\param[in] nx,ny The dimensions of the sheet.
 	*/
-double mesh::sdev(double frac,int nx,int ny) {
+double mesh::sdev(int nx,int ny) {
 	double *pt,mean=0,sd=0;
 	double *z=new double[n];
 
@@ -751,77 +756,72 @@ double mesh::sdev(double frac,int nx,int ny) {
 }
 
 /** Calculates the surface area of the sheet. 
-*	\param[in] frac The percentage of the sheet edges to ignore.
+*	\param[in] nx,ny The dimensions of the sheet.
 */
-double mesh::tot_area(double frac,int nx,int ny) {
-	int *tp=to[0],i,j,k,l;
+double mesh::tot_area(int nx,int ny) {
+	int *tp=to[0],i,k,l,ci,cj,nt;
 	double A=0.,magn;
-	// Loop through all of the unique edges.
-	// Some triangles may be double-counted here.
+	// Debug: make sure all triangles are counted 
+	FILE* fp2 = safe_fopen("tri_int.gnu", "wb");
+
+	// Loop through all of the triangles
 	for(i=0;i<n;i++) while(tp<to[i+1]) {
-		j=*tp; k=tp[1], l=tp[2];
-
-		double *ii=pts+3*i, *ij=pts+3*j, *ik=pts+3*k, *il=pts+3*l;
-		vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
-			 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-			 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
-
-		// Compute cross product of two edges for two triangles
-		e=d*c; magn=e.magnitude();
-		A+=magn/2;
+		k=tp[1], l=tp[2];
+		// Check if i,k,l are ALL within the interior. if not, don't add the area to the total.
+		// CHECK ALLL
+		ci=0,cj=i;
+		nt=find_pos(i,ci,cj,nx);
+		if (inside(ci,cj,nt,ny)) {
+			double *ii=pts+3*i, *ik=pts+3*k, *il=pts+3*l;
+			vec3 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
+				 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
+		
+			fprintf(fp2,"%g %g %g\n%g %g %g\n%g %g %g\n",*il,il[1],il[2],*ii,ii[1],ii[2],*ik,ik[1],ik[2]);
+		
+			// Compute cross product of two edges for one triangle out of the pair
+			e=d*c; magn=e.magnitude();
+			A+=magn/2;
+		}
 		tp+=3;
 	}
+	fclose(fp2);
 	return A;
 }
 
-
-/** Selects a rectangular subset of the current mesh for improved deformation statistics.
-*	Currently unfinished.
-*	\param[in] frac The percentage of the sheet edges to ignore.
-*	\param[in] nx,ny The dimensions of the sheet.
+/** Finds the row and column position of a node, given its global index. 
+	Valid for a regular hexagonal topology.
+	\param[in] g the global index
+	\param[out] i,j the row/col indices
 */
-void mesh::select_subsheet(double frac,int nx,int ny) {
-	if (n != nx * ny + (ny >> 1)) {
-		printf("Error: rectangle dimensions mismatch.\n");
-		return;
+int mesh::find_pos(int g,int &i,int &j,int nx) {
+	int nt;
+	while(true){
+		nt=nx+(j&1); 
+		if (j<nt) break;
+		// Move up a row
+		j-=nt;
+		i++;
 	}
-	int nx_int = floor((1 - frac) * nx), ny_int = floor((1 - frac) * ny);
-	int n_int = nx_int * ny_int + (ny_int >> 1);
-	printf("num new nodes: %d\n", n_int);
-	
-	double *pts_int = new double[3*n_int];
-	for (int i = 0; i < ny_int+(ny_int>>1); i++) for (int j = 0; j < nx_int; j++) {
-		pts_int[i * nx_int + j] = pts[i * nx_int + j];
-	}
-
-	FILE* fp2 = safe_fopen("subrec.gnu", "wb");
-	// Loop through all of the unique edges. 
-	// There's an error here because edges are double-counted, I think.
-	int* tp = to[0], i, j, k, l;
-	for (i = 0; i < n_int; i++) while (tp < to[i + 1]) {
-		j = *tp; k = tp[1], l = tp[2];
-		double* ii = pts + 3 * i, * ij = pts + 3 * j, * ik = pts + 3 * k, * il = pts + 3 * l; 
-		fprintf(fp2,"%g %g %g\n%g %g %g\n %g %g %g\n %g %g %g\n",*ii,ii[1],ii[2], *ij, ij[1], ij[2], *ik, ik[1], ik[2], *il, il[1], il[2]);
-		tp += 3;
-	}
-	fclose(fp2);
-
-	delete [] pts_int;
+	return nt;
+}
+/** Checks whether a node lies within a given boundary.
+*	\param[in] i,j the location of the node
+*	\param[in] R the depth of the boundary
+*/
+bool mesh::inside(int i,int j,int nt,int ny) {
+	if (i>R-1&&i<nt-R&&j>R-1&&j<ny-R) return true;
 }
 
 /** Fills an array with n log-normally distributed values after using a Gaussian filter.
 *	Valid for a mesh with regular hexagonal topology.
 *	\param[in] m the mean of the log-normal distribution.
 *	\param[in] s the standard deviation of the log-normal distribution.
-*	\param[in] l the fixed length scale of random features.
-*	\param[in] h the predetermined side edge length of the elements.
 *	\param[in] nx,ny the dimensions of the mesh.
 *	\return the array of random, filtered values.
 */
-void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int nx,int ny) {
+void mesh::gen_spring_params(double* out,double m,double s,int nx,int ny) {
 	double mm=m*m,ss=s*s;
-	double mu=0.,sig=0.,sig_smooth2=l*l/(h*h),val;
-	int R=static_cast<int>(std::ceil(l/h)); // Support of the filter
+	double mu=0.,sig=0.,R2=static_cast<double>(R*R),val;
 	int i,g=0;
 
 	// Calculate filter weights. Each weight is applied to an entire support layer.
@@ -829,7 +829,7 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 	double norm=0.,sum=0.,sum2=0.,A,B;
 	// Loop through neighbor layers, starting with closest hexagonal layer
 	for (i=0;i<=R;i++) {
-		weights[i]=exp(-(static_cast<double>(i)*i)/(2*sig_smooth2));
+		weights[i]=exp(-(static_cast<double>(i)*i)/(2*R2));
 		norm+=weights[i];
 	}
 	// Normalize the weights and sum the squares
@@ -857,7 +857,7 @@ void mesh::gen_spring_params(double* out,double m,double s,double l,double h,int
 	for (int j=0;j<ny;j++) {
 		nt=nx+(j&1);
 		for (i=0;i<nt;i++,g++) {
-			if(i>R-1&&i<nt-R&&j>R-1&&j<ny-R){
+			if(inside(i,j,nt,ny)){
 				// Loop through layers of neighbors
 				cct=0; nct=0;
 				// Layer 0: focus node

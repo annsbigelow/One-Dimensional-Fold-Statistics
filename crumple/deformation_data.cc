@@ -9,16 +9,19 @@
 int main(int argc,char **argv) {
 
 	// Check for the correct number of command-line arguments
-	if (argc!=4) {
-		fputs("Syntax: ./deformation_data <mode> <input_directory> <frame>\n"
+	if (argc!=7) {
+		fputs("Syntax: ./deformation_data <mode> <input_directory> <frame> <nx> <ny> <s>\n"
 			"Mode: \"0\" for single frame\n"
-			"		\1\" for many frames\n"
-			"Frame: frame number for single; num_frames for many\n", stderr);
+			"		\"1\" for many frames\n"
+			"Frame: frame number for single; num_frames for many\n"
+			"nx, ny: dimensions of the sheet\n"
+			"s: the side edge length\n", stderr);
 		return 1;
 	}
 
 	// Set dimensions of the mesh
-	int nx=100,ny=100; 
+	int nx=atoi(argv[4]),ny=atoi(argv[5]);
+	double sed=atof(argv[6]);
 
 	// Find output mode
 	int mode;
@@ -28,7 +31,7 @@ int main(int argc,char **argv) {
 	bool area=true;
 
 	// Read in the mesh
-	mesh_param par(0.5,0.01,0,0.2,false,true,1.3);
+	mesh_param par(0.5,0.01,0,0.2,false,true,1.3,sed);
 	mesh *mp;
 
 	int fnum = atoi(argv[3]);
@@ -47,18 +50,17 @@ int main(int argc,char **argv) {
 		sprintf(f_pts, "%s/pts.%d", argv[2], fnum);
 		mp = new mesh(par, f_topo, f_pts);
 
-		double frac=.2;
-		// Choose a percentage of the nodes 
+		// Select interior nodes. Also include option to use the whole sheet.
 		//mp->setup_springs();
-		//mp->select_subsheet(frac,nx,ny);
+		//mp->select_subsheet(nx,ny);
 
 		// Print the standard deviation of z-coordinates of the nodes
-		printf("Roughness measure: %g\n", mp->sdev(frac,nx,ny));
+		printf("Roughness measure: %g\n", mp->sdev(nx,ny));
 
 		// Setup triangle info and print the sheet area
 		if(area) {
 			mp->setup_springs();
-			printf("Sheet area: %g\n", mp->tot_area(frac,nx,ny));
+			printf("Sheet area: %g\n", mp->tot_area(nx,ny));
 		}
 
 		delete mp;
@@ -72,11 +74,11 @@ int main(int argc,char **argv) {
 			sprintf(f_pts, "%s/pts.%d", argv[2], j);
 			mp=new mesh(par, f_topo, f_pts);
 
-			sdevs[j]=mp->sdev(.2,nx,ny);
+			sdevs[j]=mp->sdev(nx,ny);
 
 			if (area) {
 				mp->setup_springs();
-				area_arr[j]=mp->tot_area(.2,nx,ny);
+				area_arr[j]=mp->tot_area(nx,ny);
 			}
 
 			delete mp;

@@ -469,7 +469,7 @@ int main(int argc,char **argv) {
 
     // Open the file
     char buf[128];
-    if(mode==0) sprintf(buf,"sheet_%dx%d.bin",nx,ny);
+    if(mode==0) sprintf(buf,"sheet_%g_%dx%d.bin",s,nx,ny);
     else if(mode==1) sprintf(buf,"sh48_%dx%d.bin",nx,ny);
     else if(mode==2) sprintf(buf,"tri_%d.bin",nx);
     else if(mode==3) sprintf(buf,"disloc_%d.bin",nx);

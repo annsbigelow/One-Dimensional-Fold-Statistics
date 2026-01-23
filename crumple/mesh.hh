@@ -49,6 +49,10 @@ class mesh : public mesh_param {
 		bool rand_st;
 		/** The contracting node positions. */
 		double *sh_pts;
+		/** The depth of the sheet's edges to ignore. */
+		int R;
+		/** The scale of random features on the shrinking sheet. */
+		double set_scale;
 		/** The shrink strengths for each node. */
 		double *shs;
 		/** The bend spring constants for each node. */
@@ -100,10 +104,11 @@ class mesh : public mesh_param {
         double energy_bsheet(double *in);
         int bandwidth();
         void add(ext_potential *ep);
-		double sdev(double frac,int nx,int ny);
-		double tot_area(double frac,int nx,int ny);
-		void select_subsheet(double frac, int nx, int ny);
-		void gen_spring_params(double* out,double mu,double sig,double l,double h,int nx,int ny);
+		double sdev(int nx,int ny);
+		double tot_area(int nx,int ny);
+		int find_pos(int g, int &i, int &j,int nx);
+		bool inside(int i, int j, int nt, int ny);
+		void gen_spring_params(double* out,double mu,double sig,int nx,int ny);
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
