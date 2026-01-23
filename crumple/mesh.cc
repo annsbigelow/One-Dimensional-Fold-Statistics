@@ -759,7 +759,7 @@ double mesh::sdev(int nx,int ny) {
 *	\param[in] nx,ny The dimensions of the sheet.
 */
 double mesh::tot_area(int nx,int ny) {
-	int *tp=to[0],i,k,l,ci,cj,nt;
+	int *tp=to[0],i,k,l,ci,cj,di,dj,ei,ej,nt,nt1,nt2;
 	double A=0.,magn;
 	// Debug: make sure all triangles are counted 
 	FILE* fp2 = safe_fopen("tri_int.gnu", "wb");
@@ -767,11 +767,10 @@ double mesh::tot_area(int nx,int ny) {
 	// Loop through all of the triangles
 	for(i=0;i<n;i++) while(tp<to[i+1]) {
 		k=tp[1], l=tp[2];
-		// Check if i,k,l are ALL within the interior. if not, don't add the area to the total.
-		// CHECK ALLL
-		ci=0,cj=i;
-		nt=find_pos(i,ci,cj,nx);
-		if (inside(ci,cj,nt,ny)) {
+		// Check if i,k,l are ALL within the interior. If not, don't add the area to the total.
+		ci=0,cj=i,di=0,dj=k,ei=0,ej=l; 
+		nt=find_pos(ci,cj,nx); nt1=find_pos(di,dj,nx); nt2=find_pos(ei,ej,nx);
+		if (inside(ci,cj,nt,ny)&&inside(di,dj,nt1,ny)&&inside(ei,ej,nt2,ny)) {
 			double *ii=pts+3*i, *ik=pts+3*k, *il=pts+3*l;
 			vec3 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
 				 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
@@ -790,26 +789,25 @@ double mesh::tot_area(int nx,int ny) {
 
 /** Finds the row and column position of a node, given its global index. 
 	Valid for a regular hexagonal topology.
-	\param[in] g the global index
-	\param[out] i,j the row/col indices
+	\param[out] row,col the row/col indices
 */
-int mesh::find_pos(int g,int &i,int &j,int nx) {
+int mesh::find_pos(int &row,int &col,int nx) {
 	int nt;
 	while(true){
-		nt=nx+(j&1); 
-		if (j<nt) break;
+		nt=nx+(row&1); 
+		if (col<nt) break;
 		// Move up a row
-		j-=nt;
-		i++;
+		col-=nt;
+		row++;
 	}
 	return nt;
 }
 /** Checks whether a node lies within a given boundary.
 *	\param[in] i,j the location of the node
-*	\param[in] R the depth of the boundary
 */
-bool mesh::inside(int i,int j,int nt,int ny) {
-	if (i>R-1&&i<nt-R&&j>R-1&&j<ny-R) return true;
+bool mesh::inside(int row,int col,int nt,int ny) {
+	if (col>R-1&&col<nt-R&&row>R-1&&row<ny-R) return true;
+	else return false;
 }
 
 /** Fills an array with n log-normally distributed values after using a Gaussian filter.
@@ -892,9 +890,9 @@ void mesh::gen_spring_params(double* out,double m,double s,int nx,int ny) {
 	}
 	for (i=0;i<n;i++) {
 		out[i]=exp(out[i]);
-		//printf("%g\n",out[i]);
+		printf("%g\n",out[i]);
 	}
-	//printf("\n");
+	printf("\n");
 	delete [] cpts; delete[] npts;
 	delete [] seen;
 	delete [] weights;

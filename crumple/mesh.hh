@@ -106,7 +106,7 @@ class mesh : public mesh_param {
         void add(ext_potential *ep);
 		double sdev(int nx,int ny);
 		double tot_area(int nx,int ny);
-		int find_pos(int g, int &i, int &j,int nx);
+		int find_pos(int &i, int &j,int nx);
 		bool inside(int i, int j, int nt, int ny);
 		void gen_spring_params(double* out,double mu,double sig,int nx,int ny);
         //void accel_repulsive(double *in,double *acc);

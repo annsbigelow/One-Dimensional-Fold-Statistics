@@ -8,7 +8,7 @@ int main() {
 
     // Read in the mesh
     int len=10;
-	double s=10.;
+	double s=1.;
     int inc=20;
     char buf[128];
     sprintf(buf,"sheet_%g_%dx%d.bin",s,len,len);
