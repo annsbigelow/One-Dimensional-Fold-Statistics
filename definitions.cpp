@@ -38,7 +38,7 @@ void folds_stats::altFold_segdens(int& numplaces,string txt){
         }
 
         // Compute the normalizing factor
-        double sum=0;
+        double sum=0.;
         for (int j = 0; j < numplaces; j++) sum += range[j];
 
         // Add the normalized distribution to the running total
@@ -185,20 +185,19 @@ void folds_stats::logavg(string txt) {
 
 vector<double> folds_stats::altFold(string txt) {
     vector<double> segs_out,q,qmap;
-    //vector<double> segsin = { 0,1 };
     long size;
     double x;
     bool* dirvec = new bool[n],dir;
-    vector<double>  c(n, 0.0);
     vector<double> logc(n, 0.0);
     vector<double> cavg(n, 0.0);
-    //long sizeo;
 
     double t1 = omp_get_wtime();
     // Outer averaging loop for crease exp. stats only. COMMENT OUT for seg dens function
-    for (int j = 1; j <= instance; j++) {
+  //  for (int j = 1; j <= instance; j++) {
         vector<double> segsin = { 0,1 };
+		vector<double>  c(n, 0.0);
         for (int k = 0; k < n; k++) {
+			segs_out.clear();
             q.push_back(gsl_rng_uniform(rng));
             dir = rand_bit();
             dirvec[k] = dir; // Store the directions
@@ -215,7 +214,7 @@ vector<double> folds_stats::altFold(string txt) {
                 }
             }
             x = qmap[k];
-            // check if x in outermost segment
+            // check if x is in outermost segment
             if (getmin(segsin) < x) {
                 // loop through each segment
                 size = segsin.size();
@@ -223,22 +222,25 @@ vector<double> folds_stats::altFold(string txt) {
                     // identify i'th segment
                     double seg_l = segsin[i], seg_r = segsin[i + 1];
                     // right fold
-                    // Chris' cleaned up fold algorithm. Same as in fold()
+                    // Same algorithm as in fold()
                     // This could be more efficient. I don't think two segsin and segsout are necessary.
                     if (dir) {
                         if (x > seg_r) {
                             segs_out.push_back((2 * x) - seg_r);
                             segs_out.push_back((2 * x) - seg_l);
+							c[k] += 1;
                         }
                         else if (x > seg_l) {
                             segs_out.push_back(x);
                             segs_out.push_back((2 * x) - seg_l);
                             segs_out.push_back(x);
                             segs_out.push_back(seg_r);
+							c[k] += 2;
                         }
                         else {
                             segs_out.push_back(seg_l);
                             segs_out.push_back(seg_r);
+							c[k] += 1;
                         }
                     }
                     // left fold
@@ -246,45 +248,43 @@ vector<double> folds_stats::altFold(string txt) {
                         if (x > seg_r) {
                             segs_out.push_back(seg_l);
                             segs_out.push_back(seg_r);
+							c[k]+=1;
                         }
                         else if (x > seg_l) {
                             segs_out.push_back(seg_l);
                             segs_out.push_back(x);
                             segs_out.push_back((2 * x) - seg_r);
                             segs_out.push_back(x);
+							c[k]+=2;
                         }
                         else {
                             segs_out.push_back((2 * x) - seg_r);
                             segs_out.push_back((2 * x) - seg_l);
+							c[k]+=1;
                         }
                     }
                 }
             }
             // else: don't fold at outermost endpoints. Then crease # does not change
-            else {segs_out = segsin;}
-            //// CODE BELOW only collects stats for crease exponent. COMMENT OUT if collecting SEGMENT DENSITY data
-            long sizeo = segs_out.size();
-            // Number of creases is number of segments - 1 
-            c[k] = (sizeo / 2) - 1;
+            else {segs_out = segsin; c[k]+=0;}
 \
             // Avoid the case when no fold happened the first time. Then log(0) = -inf
-            if (c[k] == 0.0) {c[k] = 1.0;}
-            logc[k] = log(c[k]);
-            cavg[k] += logc[k];
+				//if (c[k] == 0.0) {c[k] = 1.0;}
+				//logc[k] = log(c[k]);
+				//cavg[k] += logc[k];
+			//cavg[k]+=c[k];
             segsin = segs_out;
-            //printf("Time elapsed for k=%d is %g s\n", k, omp_get_wtime() - t1);
+			//printf("c[%d]=%g\n", k, c[k]);
         }
-        //printf("Time elapsed for j=%d is %g s\n", j, omp_get_wtime() - t1);
-        segs_out.clear();
+        //segs_out.clear();
         q.clear();
         qmap.clear();
-    }
-    data.open(txt);
+    //}
+    //data.open(txt);
     // Average the logs of crease values
-    for (int i = 0; i < n; i++) {cavg[i] /= instance; data << cavg[i] << '\n';}
-    data.close();
-    //display(c);
-    return segs_out; // this is only for seg dens functionality
+    //for (int i = 0; i < n; i++) {cavg[i] /= instance; data << cavg[i] << '\n';}
+    //data.close();
+    return segs_out; // this is only for seg dens 
     delete[] dirvec;
 }
 

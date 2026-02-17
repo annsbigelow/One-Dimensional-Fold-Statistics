@@ -22,11 +22,11 @@ int main() {
 	// Segment Density
 	// Specify the bins spacing to find the density of facets. Usually we use ~256.
 	int s_divide = 256;
-    fs.segdens(s_divide,filename);
+    fs.altFold_segdens(s_divide,filename);
          
 	// Test fold protocols
-      //  fs.altFold(filename);
-        printf("Total time elapsed is %g s\n", omp_get_wtime() - t0);
+   // fs.altFold(filename);
+    printf("Total time elapsed is %g s\n", omp_get_wtime() - t0);
 
     return 0;
 }
