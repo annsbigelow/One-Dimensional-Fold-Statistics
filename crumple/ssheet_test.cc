@@ -7,13 +7,20 @@
 int main() {
 
     // Read in the mesh
-    int len=10;
+    int len=100;
 	double s=1.;
-    int inc=20;
+    //int inc=20;
     char buf[128];
     sprintf(buf,"sheet_%g_%dx%d.bin",s,len,len);
     //sprintf(buf,"rsheet_2500_2.bin");
-    mesh_param par(0.5,0.01,0,0.2,false,true,1.3,s);
+
+	// Bend spring
+	const double Kappa=0.2;
+	// Stretch spring
+	const double K=0.5;
+	// Repulsion sphere diameter
+	const double diam=1.3;
+    mesh_param par(K,0.01,0,Kappa,false,true,diam,s);
     mesh_rk4 mp(par,buf);
 
     // Centralize and scale the mesh
@@ -34,7 +41,9 @@ int main() {
 	}
 
 	// Copy initial positions and randomize spring constants.
-	if (mp.shrink) mp.init_shrink(true,true,true,len,len);
+	// Mean and variance for each set of springs: shrink, bend, stretch
+	const double shm=.0009,shv=.0001,bm=.1,bv=.06,ksm=.5,ksv=.2;
+	if (mp.shrink) mp.init_shrink(true,true,true,shm,shv,bm,bv,ksm,ksv,len,len);
 
     // Add external potential.
     //ep_spherical eps(80,10,5000,0.0002);
@@ -49,5 +58,5 @@ int main() {
     mp.setup_output_dir("srun_h.odr");
 
     // Evolve in time with equally spaced output
-	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 100);
+	mp.solve_adaptive(1000, 1e-3, 1e-3, false, 150);
 }

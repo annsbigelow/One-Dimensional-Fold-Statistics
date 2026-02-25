@@ -62,7 +62,8 @@ mesh::~mesh() {
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
- * be fully relaxed. */
+ * be fully relaxed. Sets up the boundaries of the subsheet, if applicable.
+ */
 void mesh::setup_springs() {
 
     // For this case, the number of springs will just be half the number of
@@ -216,15 +217,17 @@ void mesh::reset_relaxed() {
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
 *	\param[in] shflag, bendflag, stflag: Flags setting the choices to use random spring constants.
+*	param[in] shm,shv,...,ksv: Mean and variance for each set of springs.
 */
-void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,int nx,int ny) {
+void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
+	double ksm,double ksv,int nx,int ny) {
 	sh_pts=new double[3*n]; shs=new double[n]; kappas=new double[n]; kss=new double[n];
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
 
-	if(rand_sh) gen_spring_params(shs,.0009,.0001,nx,ny);
-	if(rand_b) gen_spring_params(kappas,.1,.06,nx,ny);
-	if(rand_st) gen_spring_params(kss,.5,.2,nx,ny);
+	if(rand_sh) gen_spring_params_rec(shs,shm,shv,nx,ny);
+	if(rand_b) gen_spring_params_rec(kappas,bm,bv,nx,ny);
+	if(rand_st) gen_spring_params_rec(kss,ksm,ksv,nx,ny);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -735,78 +738,13 @@ void mesh::add(ext_potential *ep) {
     ex_pot[n_ep++]=ep;
 }
 
-/** Calculates the standard deviation of the z-coordinates of the sheet nodes
-	as a measure of deformation. 
-*	\param[in] nx,ny The dimensions of the sheet.
-	*/
-double mesh::sdev(int nx,int ny) {
-	double *pt,mean=0,sd=0;
-	double *z=new double[n];
-
-	for(int i=0;i<n;i++) {
-		pt=pts+3*i; z[i]=pt[2];
-		mean+=z[i];
-	}
-	mean/=n;
-	for(int i=0;i<n;i++) sd+=(z[i]-mean)*(z[i]-mean);
-	sd/=(n-1);
-
-	delete [] z;
-	return sqrt(sd);
-}
-
-/** Calculates the surface area of the sheet. 
-*	\param[in] nx,ny The dimensions of the sheet.
-*/
-double mesh::tot_area(int nx,int ny) {
-	int *tp=to[0],i,k,l,ci,cj,di,dj,ei,ej,nt,nt1,nt2;
-	double A=0.,magn;
-	// Debug: make sure all triangles are counted 
-	FILE* fp2 = safe_fopen("tri_int.gnu", "wb");
-
-	// Loop through all of the triangles
-	for(i=0;i<n;i++) while(tp<to[i+1]) {
-		k=tp[1], l=tp[2];
-		// Check if i,k,l are ALL within the interior. If not, don't add the area to the total.
-		ci=0,cj=i,di=0,dj=k,ei=0,ej=l; 
-		nt=find_pos(ci,cj,nx); nt1=find_pos(di,dj,nx); nt2=find_pos(ei,ej,nx);
-		if (inside(ci,cj,nt,ny)&&inside(di,dj,nt1,ny)&&inside(ei,ej,nt2,ny)) {
-			double *ii=pts+3*i, *ik=pts+3*k, *il=pts+3*l;
-			vec3 c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-				 d(*il-*ii,il[1]-ii[1],il[2]-ii[2]), e;
-		
-			fprintf(fp2,"%g %g %g\n%g %g %g\n%g %g %g\n",*il,il[1],il[2],*ii,ii[1],ii[2],*ik,ik[1],ik[2]);
-		
-			// Compute cross product of two edges for one triangle out of the pair
-			e=d*c; magn=e.magnitude();
-			A+=magn/2;
-		}
-		tp+=3;
-	}
-	fclose(fp2);
-	return A;
-}
-
-/** Finds the row and column position of a node, given its global index. 
-	Valid for a regular hexagonal topology.
-	\param[out] row,col the row/col indices
-*/
-int mesh::find_pos(int &row,int &col,int nx) {
-	int nt;
-	while(true){
-		nt=nx+(row&1); 
-		if (col<nt) break;
-		// Move up a row
-		col-=nt;
-		row++;
-	}
-	return nt;
-}
 /** Checks whether a node lies within a given boundary.
-*	\param[in] i,j the location of the node
+*	\param[in] row,col the location of the node
+*	\param[in] nt,ny the x- and y-dimensions of the current row
+*	\param[in] sub the layers of edge nodes to ignore
 */
-bool mesh::inside(int row,int col,int nt,int ny) {
-	if (col>R-1&&col<nt-R&&row>R-1&&row<ny-R) return true;
+bool mesh::inside(int row,int col,int nt,int ny,int sub) {
+	if (col>sub-1&&col<nt-sub&&row>sub-1&&row<ny-sub) return true;
 	else return false;
 }
 
@@ -817,7 +755,7 @@ bool mesh::inside(int row,int col,int nt,int ny) {
 *	\param[in] nx,ny the dimensions of the mesh.
 *	\return the array of random, filtered values.
 */
-void mesh::gen_spring_params(double* out,double m,double s,int nx,int ny) {
+void mesh::gen_spring_params_rec(double* out,double m,double s,int nx,int ny) {
 	double mm=m*m,ss=s*s;
 	double mu=0.,sig=0.,R2=static_cast<double>(R*R),val;
 	int i,g=0;
@@ -855,7 +793,7 @@ void mesh::gen_spring_params(double* out,double m,double s,int nx,int ny) {
 	for (int j=0;j<ny;j++) {
 		nt=nx+(j&1);
 		for (i=0;i<nt;i++,g++) {
-			if(inside(i,j,nt,ny)){
+			if(inside(i,j,nt,ny,R)){
 				// Loop through layers of neighbors
 				cct=0; nct=0;
 				// Layer 0: focus node
@@ -890,9 +828,9 @@ void mesh::gen_spring_params(double* out,double m,double s,int nx,int ny) {
 	}
 	for (i=0;i<n;i++) {
 		out[i]=exp(out[i]);
-		printf("%g\n",out[i]);
+		//printf("%g\n",out[i]);
 	}
-	printf("\n");
+	//printf("\n");
 	delete [] cpts; delete[] npts;
 	delete [] seen;
 	delete [] weights;

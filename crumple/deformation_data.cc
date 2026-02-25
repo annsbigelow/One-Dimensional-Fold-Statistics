@@ -8,14 +8,19 @@
 
 int main(int argc,char **argv) {
 
-	// Check for the correct number of command-line arguments
-	if (argc!=7) {
-		fputs("Syntax: ./deformation_data <mode> <input_directory> <frame> <nx> <ny> <s>\n"
+	// Check for the correct command-line arguments
+	if (argc!=8) {
+		fputs("Syntax: ./deformation_data <mode> <input_directory> <frame> <nx> <ny> <s> <topo>\n"
 			"Mode: \"0\" for single frame\n"
 			"		\"1\" for many frames\n"
 			"Frame: frame number for single; num_frames for many\n"
 			"nx, ny: dimensions of the sheet\n"
-			"s: the side edge length\n", stderr);
+			"s: the side edge length\n"
+			"topo: \"0\" for regular hexagonal topology\n", stderr);
+		return 1;
+	}
+	if(strcmp(argv[7],"0")!=0) {
+		fputs("This mesh topology is not supported yet.\n",stderr);
 		return 1;
 	}
 
@@ -27,8 +32,6 @@ int main(int argc,char **argv) {
 	int mode;
 	if(strcmp(argv[1],"0")==0) mode=0;
 	else mode=1;
-
-	bool area=true;
 
 	// Read in the mesh
 	mesh_param par(0.5,0.01,0,0.2,false,true,1.3,sed);
@@ -50,50 +53,48 @@ int main(int argc,char **argv) {
 		sprintf(f_pts, "%s/pts.%d", argv[2], fnum);
 		mp = new mesh(par, f_topo, f_pts);
 
-		// Select interior nodes. Also include option to use the whole sheet.
-		//mp->setup_springs();
-		//mp->select_subsheet(nx,ny);
-
-		// Print the standard deviation of z-coordinates of the nodes
-		printf("Roughness measure: %g\n", mp->sdev(nx,ny));
-
-		// Setup triangle info and print the sheet area
-		if(area) {
-			mp->setup_springs();
-			printf("Sheet area: %g\n", mp->tot_area(nx,ny));
-		}
-
+		// Setup triangle info and subsheet boundaries
+		mp->setup_springs();
+		// Print the roughness metrics
+		double Sq,Sa; mp->Sq_Sa(Sq,Sa,nx,ny);
+		printf("Root mean square height: %g\nArithmetical mean height: %g\n",Sq,Sa);
+		printf("Sheet area: %g\n", mp->tot_area_rec(nx,ny));
 		delete mp;
 	}
 	else {
 		double* sdevs = new double[fnum];
+		double* Sas=new double[fnum];
 		double* area_arr = new double[fnum];
 		// Read in the data for each frame
 		for(int j=0;j<fnum;j++) {
 			sprintf(f_topo, "%s/topo", argv[2]);
 			sprintf(f_pts, "%s/pts.%d", argv[2], j);
 			mp=new mesh(par, f_topo, f_pts);
+			mp->setup_springs();
 
-			sdevs[j]=mp->sdev(nx,ny);
-
-			if (area) {
-				mp->setup_springs();
-				area_arr[j]=mp->tot_area(nx,ny);
-			}
+			double Sq,Sa;
+			mp->Sq_Sa(Sq,Sa,nx,ny);
+			sdevs[j]=Sq;
+			Sas[j]=Sa;
+			area_arr[j]=mp->tot_area_rec(nx,ny);
 
 			delete mp;
 		}
 
-		// Write the data to a file
+		// Write the data to a files
 		FILE* fp=safe_fopen("sdevs.bin", "wb");
 		fwrite(sdevs,sizeof(double),fnum,fp);
 		fclose(fp);
 		FILE* fp1 = safe_fopen("areas.bin", "wb");
 		fwrite(area_arr, sizeof(double), fnum, fp1);
 		fclose(fp1);
+		FILE* fp2=safe_fopen("mean_heights.bin","wb");
+		fwrite(Sas,sizeof(double),fnum,fp2);
+		fclose(fp2);
 
 		delete[] area_arr;
 		delete[] sdevs;
+		delete[] Sas;
 	}
 	delete[] f_topo;
 }

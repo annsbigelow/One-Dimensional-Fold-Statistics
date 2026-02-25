@@ -84,7 +84,8 @@ class mesh : public mesh_param {
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
-		void init_shrink(bool shflag, bool bendflag, bool stflag,int nx,int ny);
+		void init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
+			double ksm,double ksv,int nx,int ny);
         void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);
@@ -104,11 +105,15 @@ class mesh : public mesh_param {
         double energy_bsheet(double *in);
         int bandwidth();
         void add(ext_potential *ep);
-		double sdev(int nx,int ny);
-		double tot_area(int nx,int ny);
-		int find_pos(int &i, int &j,int nx);
-		bool inside(int i, int j, int nt, int ny);
-		void gen_spring_params(double* out,double mu,double sig,int nx,int ny);
+		void gen_spring_params_rec(double* out, double mu, double sig, int nx, int ny);
+
+		// Roughness (deformation) functions
+		void Sq_Sa(double& Sq,double& Sa,int nx,int ny);
+		double Sdr(int nx,int ny);
+		double tot_area_rec(int nx,int ny);
+		int find_pos_rec(int &i, int &j,int nx);
+		bool inside(int i,int j,int nt,int ny,int sub);
+
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {

@@ -1,13 +1,13 @@
 # Include the configuration file
-include ../config.mk
+include ../config/config.mk.linux
 
 lflags=`gsl-config --libs`
 iflags=`gsl-config --cflags`
 
 # Lists of files to be built
-objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o ext_potential.o p_grid.o
+objs=rk4.o mesh.o mesh_en.o mesh_io.o common.o ext_potential.o p_grid.o deformation_data.o deformation.o
 src=$(patsubst %.o,%.cc,$(objs) $(mg_objs))
-execs=ode_test ode_conv virt sheet_gen sph_gen unpack mesh_conv ssheet_test bsheet_test
+execs=ode_test ode_conv virt sheet_gen sph_gen unpack mesh_conv ssheet_test bsheet_test deformation_data deformation
 
 all: $(execs)
 
@@ -39,7 +39,7 @@ virt: virt.cc
 	$(cxx) $(cflags) $(iflags) -o $@ $^
 
 unpack: unpack.cc libcrump.a
-	$(cxx) $(cflags) $(iflags) -o $@ $^
+	$(cxx) $(cflags) $(iflags) -o $@ $^ $(lflags)
 
 sph_gen: sph_gen.cc
 	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
@@ -55,5 +55,11 @@ ssheet_test: ssheet_test.cc libcrump.a
 
 bsheet_test: bsheet_test.cc libcrump.a
 	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
+
+deformation_data: deformation_data.cc libcrump.a
+	$(cxx) $(cflags) $(iflags) -o $@ $^ $(lflags)
+
+deformation: deformation.cc libcrump.a
+	$(cxx) $(cflags) $(iflags) -o $@ $^ $(lflags)
 
 .PHONY: clean depend
