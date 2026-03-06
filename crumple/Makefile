@@ -1,5 +1,5 @@
 # Include the configuration file
-include ../config/config.mk.linux
+include ../config.mk
 
 lflags=`gsl-config --libs`
 iflags=`gsl-config --cflags`

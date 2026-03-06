@@ -33,6 +33,8 @@ class mesh : public mesh_param {
         int nc;
         /** The total number of springs. */
         int ns;
+        /** The total number of triangles. */
+        int ntri;
         /** The total number of "hinge" edges. */
         int nh;
         /** The total number of external potentials. */
@@ -100,6 +102,7 @@ class mesh : public mesh_param {
         void accel_springs(double *in,double *acc);
         void accel_bsheet(double *in,double *acc);
         void accel_rbsheet(double t_,double *in,double *acc);
+        void print_triangle_table();
         double energy(double t_,double *in);
         double energy_springs(double *in);
         double energy_bsheet(double *in);

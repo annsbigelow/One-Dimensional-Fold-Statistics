@@ -8,7 +8,7 @@ int main() {
 
     // Create mesh and initialize acceleration
     mesh_param par(0.05,0.02,0.001,false,false);
-    mesh_rk4 mp(par,"disloc_30.bin");
+    mesh_rk4 mp(par,"sh48_3x3.bin");
 
     // Centralize and scale the mesh
     double wx,wy,wz;
@@ -17,6 +17,11 @@ int main() {
     /* Set up springs. Assign lengths manually, since initializing out of
     equilibrium configuration. */
     mp.setup_springs();
+
+    // XXX - Diagnostic routine to see triangles
+    mp.print_triangle_table();
+    return 1;
+
     for(double *p=mp.reg;p<mp.reg+mp.ns;p++) *p=1.;
     for(double *p=mp.ref;p<mp.ref+mp.nh;p++) *p=2./sqrt(3);
 
@@ -27,6 +32,7 @@ int main() {
     // Add centering potential
     ep_centering epc(0.001);
     mp.add(&epc);
+
 
     // Setup the output directory and allocate memory for integrator.
     mp.setup_output_dir("brun_d.out");

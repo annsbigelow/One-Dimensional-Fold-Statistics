@@ -99,7 +99,45 @@ void mesh::setup_springs() {
     }
     sigma=emax;
 
-    if(bsheet_model) {
+    // Compute the number of triangles
+    ntri=0;
+    for(int i=0;i<n;i++)
+        ntri+=(ncn[i]&bflag)==0?ncn[i]:ncn[i]-1;
+    if(ntri%3!=0) {
+        fputs("Triangle count should be divisible by 3",stderr);
+        exit(1);
+    }
+    ntri/=3;
+
+    // Compute the triangle table
+    to=new int*[n+1];
+    tom=new int[2*ntri];
+    int *top=tom;edp=edm;
+    for(int i=0;i<n;i++) {
+        to[i]=top;
+
+        // Enumerate triangles between successive edge pairs
+        while(edp+1<ed[i+1]) {
+            if(*edp>i&&edp[1]>i) {
+                *(top++)=*edp;
+                *(top++)=edp[1];
+            }
+            edp++;
+        }
+
+        // If this isn't a boundary case, then enumerate an
+        // additional triangle
+        if((ncn[i]&bflag)==0) {
+            if(*edp>i && *ed[i]>i) {
+                *(top++)=*edp;
+                *(top++)=*ed[i];
+            }
+        }
+        edp++;
+    }
+
+    // XXX - skip for now
+   /* if(false) {
 
         // Set up relaxed areas of triangles joined by a "hinge" edge.
         // Determine number of "hinges" by subtracting boundary edges from total.
@@ -116,8 +154,8 @@ void mesh::setup_springs() {
         int *top=tom;
         regp=ref; edp=*ed;
         for(i=0;i<n;i++) {
-        to[i]=top;
-        if(edp!=ed[i+1]) {
+            to[i]=top;
+            if(edp!=ed[i+1]) {
 
                 // Cycle around the edges. Remember the first connected vertex.
                 j=*(edp++);
@@ -157,16 +195,26 @@ void mesh::setup_springs() {
                     }
                     edp++;
                 }
-        }
+            }
         }
         to[n]=top;
         //printf("%d %d\n",nh,ct);
-    }
-	if(shrink) {
+    }*/
+    if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
 	}
+}
+
+void mesh::print_triangle_table() {
+    int *top=tom;
+    for(int i=0;i<n;i++) {
+        while(top<to[i+1]) {
+            printf("(%d,%d,%d)\n",i,*top,top[1]);
+            top+=2;
+        }
+    }
 }
 
 /** Perturbs the rest lengths of the springs by uniform random numbers
