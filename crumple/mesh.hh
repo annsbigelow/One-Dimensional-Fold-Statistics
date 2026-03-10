@@ -95,28 +95,20 @@ class mesh : public mesh_param {
         void read_topology(FILE *fp);
         void read_positions(FILE *fp);
         void setup_springs();
-        void perturb_springs(double min_fac,double max_fac);
         void reset_relaxed();
         void contact_forces(double *in,double *out);
-        void acceleration(double t_,double *in,double *acc);
-        void accel_springs(double *in,double *acc);
-        void accel_bsheet(double *in,double *acc);
-        void accel_rbsheet(double t_,double *in,double *acc);
+        void fem_forces(double t_,double *in,double *acc);
         void print_triangle_table();
         double energy(double t_,double *in);
-        double energy_springs(double *in);
-        double energy_bsheet(double *in);
         int bandwidth();
         void add(ext_potential *ep);
 		void gen_spring_params_rec(double* out, double mu, double sig, int nx, int ny);
-
 		// Roughness (deformation) functions
 		void Sq_Sa(double& Sq,double& Sa,int nx,int ny);
 		double Sdr(int nx,int ny);
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
-
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
@@ -183,7 +175,7 @@ class mesh : public mesh_param {
         }
         inline void dfun(double *in,double *out) {
             for(int i=0;i<3*n;i++) out[i]=0.;
-            acceleration(fzt,in,out);
+            fem_forces(fzt,in,out); // TODO - currently broken
             for(int i=0;i<3*n;i++) out[i]=-out[i];
         }
     private:
@@ -201,14 +193,8 @@ class mesh : public mesh_param {
         int edge_mark(int i,int *edp);
         void cyl_print(FILE *fp,double *p,double *q);
         void edge_force(double *in,double *acc,int i,int k);
-        void stretch_force(double *in,double *acc,int i,int k,double sf);
 		void shrink_force(double fac,double* in, double* acc, int i);
         void damp_force(double *in,double *acc,int i,int k);
-        double edge_energy(double *in,int i,int k);
-        void triangle_force(double *in,double *acc,int i,int j,int k,int l);
-        double triangle_energy(double *in,int i,int j,int k,int l);
-        double edge_factor(double *in,int i,int j,int k,int l);
-        void bend_force(double *in,double *acc,int i,int j,int k,int l,double ef);
         void repulsive_force(double *in,double *acc,int i,int k);
         void min_message(int &piter,int iter,gsl_multimin_fdfminimizer *s,double &t0);
         inline bool find_unmarked(int j,int *&p) {

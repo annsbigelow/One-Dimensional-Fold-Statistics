@@ -84,21 +84,6 @@ void mesh::setup_springs() {
     }
     eo[n]=eop;
 
-    // Set up relaxed connection lengths
-    reg=new double[ns];
-    double *regp=reg,dx,dy,dz,emax=0;
-    for(i=0,edp=eom;i<n;i++) {
-        while(edp<eo[i+1]) {
-            dx=pts[3*i]-pts[3*(*edp)];
-            dy=pts[3*i+1]-pts[3*(*edp)+1];
-            dz=pts[3*i+2]-pts[3*(*(edp++))+2];
-            *regp=sqrt(dx*dx+dy*dy+dz*dz);
-        if(*regp>emax) emax=*regp;
-            regp++;
-        }
-    }
-    sigma=emax;
-
     // Compute the number of triangles
     ntri=0;
     for(int i=0;i<n;i++)
@@ -136,70 +121,9 @@ void mesh::setup_springs() {
         edp++;
     }
 
-    // XXX - skip for now
-   /* if(false) {
+    // TODO - initialize lumped mass diagnonal entries []. Note that by this
+    // point the table of triangles is available.
 
-        // Set up relaxed areas of triangles joined by a "hinge" edge.
-        // Determine number of "hinges" by subtracting boundary edges from total.
-        int nb=0,j,j2,k,ct=0;
-        for(i=0;i<n;i++) {
-            if(ncn[i]&bflag) nb++;
-        }
-        nh=ns-nb;
-        to=new int*[n+1];
-        tom=new int[3*nh];
-        ref=new double[nh];
-
-        // Set up relaxed triangle areas as sums of triangle pairs
-        int *top=tom;
-        regp=ref; edp=*ed;
-        for(i=0;i<n;i++) {
-            to[i]=top;
-            if(edp!=ed[i+1]) {
-
-                // Cycle around the edges. Remember the first connected vertex.
-                j=*(edp++);
-                if(edp<ed[i+1]) {
-                    j2=*edp;
-
-                    // Loop over the other vertices
-                    while(edp+1<ed[i+1]) {
-                        k=*(edp++);
-                        if(i<k) {
-                            *(regp++)=edge_factor(pts,i,edp[-2],k,*edp);
-                            *(top++)=edp[-2];
-                            *(top++)=k;
-                            *(top++)=*edp;
-                            ct++;
-                        }
-                    }
-                    k=*edp;
-
-                    // Add triangles to make a complete loop, if this is not a boundary
-                    // vertex
-                    if((ncn[i]&bflag)==0) {
-                        if(i<k) {
-                            *(regp++)=edge_factor(pts,i,edp[-1],k,j);
-                            *(top++)=edp[-1];
-                            *(top++)=k;
-                            *(top++)=j;
-                            ct++;
-                        }
-                        if(i<j) {
-                            *(regp++)=edge_factor(pts,i,k,j,j2);
-                            *(top++)=k;
-                            *(top++)=j;
-                            *(top++)=j2;
-                            ct++;
-                        }
-                    }
-                    edp++;
-                }
-            }
-        }
-        to[n]=top;
-        //printf("%d %d\n",nh,ct);
-    }*/
     if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
@@ -213,51 +137,6 @@ void mesh::print_triangle_table() {
         while(top<to[i+1]) {
             printf("(%d,%d,%d)\n",i,*top,top[1]);
             top+=2;
-        }
-    }
-}
-
-/** Perturbs the rest lengths of the springs by uniform random numbers
- * \param[in] (min_fac,max_fac) the range that the uniform numbers are sampled
- *                              from. */
-void mesh::perturb_springs(double min_fac,double max_fac) {
-    double *rp=reg,rfac=(max_fac-min_fac)/RAND_MAX,emax=0;
-    int i,*ep=eom;
-    unsigned int *np=ncn,*np2;
-
-    // Loop over all of the springs
-    for(i=0;i<n;i++,np++) while(ep<eo[i+1]) {
-        np2=ncn+(*(ep++));
-
-        // Randomly perturb all edges except those between boundary nodes, if boundary fixed
-        if(fix_boundary&&(*np&bflag)&&(*np2&bflag)) rp++;
-        else {
-            *rp*=min_fac+static_cast<double>(rand())*rfac;
-            if(*rp>emax) emax=*rp;
-            rp++;
-        }
-    }
-    sigma=emax;
-}
-
-/** Resets the current mesh configuration to be the new relaxed configuration. */
-void mesh::reset_relaxed() {
-    double *rp=reg,dx,dy,dz,emax=0; int i,*ep=eom,*tp=tom;
-    for(i=0;i<n;i++) while(ep<eo[i+1]) {
-        dx=pts[3*i]-pts[3*(*ep)];
-        dy=pts[3*i+1]-pts[3*(*ep)+1];
-        dz=pts[3*i+2]-pts[3*(*(ep++))+2];
-        *rp=sqrt(dx*dx+dy*dy+dz*dz);
-        if(*rp>emax) emax=*rp;
-        rp++;
-    }
-    sigma=emax;
-
-    if(bsheet_model) {
-        rp=ref;
-        for(i=0;i<n;i++) while(tp<to[i+1]) {
-            *(rp++)=edge_factor(pts,i,*tp,tp[1],tp[2]);
-            tp+=3;
         }
     }
 }
@@ -282,16 +161,24 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
 
-    // Compute drag
+    // TODO - in initialization, build a table of the lumped mass matrix
+    // diagonal entries; this will likely just work out as proportional to
+    // triangle areas in the original mesh file. Write M[i] as mass at vertex
+    // i.
+
+    // This line initializes an air-resistance-type drag on the nodes. It
+    // should work out that the (accelaration) = - (const.)*(velocity). TODO -
+    // at vertex i, set equal to = - (const.)*(vel)*M[i].
     for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
 
-    // Add accelerations due to springs and external potentials
-    acceleration(t_,in,acc);
+    // Add forces coming from finite-element computations
+    fem_forces(t_,in,acc);
 
-    // If repulsion is enabled, then add in the contact forces between mesh
-    // points
-    //if(repulsion)
-    contact_forces(in,out);
+    // XXX - we can ignore this for now
+    // contact_forces(in,out);
+
+    // TODO - divide all terms in the acceleration array by the corresponding
+    // M[i]. (Essentially applying Newton's second law, a=F/m.
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -374,20 +261,29 @@ void mesh::contact_forces(double *in,double *out) {
     }
 }
 
-/** Computes the acceleration due to springs and external potentials.
+/** Computes the finite-elements due from sheet mechanics.
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions.
  * \param[in] out the mesh point accelerations (cumulative). */
-void mesh::acceleration(double t_,double *in,double *acc) {
+void mesh::fem_forces(double t_,double *in,double *acc) {
 
-    // Add repulsive forces if present
-    //if(repulsion) accel_repulsive(in,acc);
-
+    // TODO - implement FEM computations for P integrals
     // Compute accelerations from the sheet
-    bsheet_model?accel_rbsheet(t_,in,acc):accel_springs(in,acc);
+    int *top=tom;
+    for(int i=0;i<n;i++) {
+
+        // This loop will go over all triangles in the table with i as the
+        // smallest vertex
+        while(top<to[i+1]) {
+            printf("(%d,%d,%d)\n",i,*top,top[1]);
+            // TODO - evaluate FEM computations for triangle (i,*top,top[1])
+
+            top+=2;
+        }
+    }
 
     // Add accelerations from the external potentials
-    for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
+    //for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
 }
 
 /** Computes the energy.
@@ -395,89 +291,12 @@ void mesh::acceleration(double t_,double *in,double *acc) {
 double mesh::energy(double t_,double *in) {
 
     // Compute energies due to edge springs
-    double en=bsheet_model?energy_bsheet(in):energy_springs(in);
+    /*double en=bsheet_model?energy_bsheet(in):energy_springs(in);
 
     // Add energies due to external potentials
     for(int i=0;i<n_ep;i++) en+=ex_pot[i]->energy(t_,n,in);
-    return en;
-}
-
-/** Adds the edge spring forces for the shapeable sheet model.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_springs(double *in,double *acc) {
-
-    int i,*ep=eo[0],of=ep-eom;
-    double *rp=reg+of;
-
-    for(i=0;i<n;i++) while(ep<eo[i+1]) {
-        if(dashpot) damp_force(in,acc,i,*ep);
-        stretch_force(in,acc,i,*(ep++),*(rp++));
-    }
-}
-
-/** Computes the accelerations based on the bending sheet model with random mesh.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_rbsheet(double t_,double *in,double *acc) {
-    int i,*ep=eo[0],*tp=to[0],of=ep-eom;
-    double *rp=reg+of;
-
-    // first compute the edge forces.
-    for(i=0;i<n;i++) while(ep<eo[i+1]) {
-        if(dashpot) damp_force(in,acc,i,*ep);
-        stretch_force(in,acc,i,*(ep++),*(rp++));
-    }
-
-    // next add in bending forces.
-    of=(tp-tom)/3; rp=ref+of;
-    for(i=0;i<n;i++) while(tp<to[i+1]) {
-        bend_force(in,acc,i,*tp,tp[1],tp[2],*(rp++));
-        tp+=3;
-    }
-
-	// next add in shrink forces.
-	if (shrink) {
-        double fac=exp(-0.001*t_);
-		for(i=0;i<n;i++) shrink_force(fac,in,acc,i);
-	}
-}
-
-/** Computes the energy from the spring forces in the shapeable sheet
- * model.
- * \param[in] in the mesh point positions.
- * \return The energy. */
-double mesh::energy_springs(double *in) {
-    double en=0,*pp,*pp2,*rp=reg,rs,dx,dy,dz;int i,*ep=eom;
-    for(pp=in,i=0;i<n;i++,pp+=3) while(ep<eo[i+1]) {
-
-        // Find the vector to the neighboring vertex
-        pp2=in+3*(*ep);
-        dx=*pp-*(pp2++);
-        dy=pp[1]-*(pp2++);
-        dz=pp[2]-*pp2;
-
-        // Compute the force
-        rs=*(rp++)-sqrt(dx*dx+dy*dy+dz*dz);
-        en+=rs*rs;
-    }
-
-    // Return the value, scaled by the spring constant
-    return 0.5*K*en;
-}
-
-/** Computes the bandwidth of the banded hessian matrix. */
-int mesh::bandwidth() {
-    int i,e,*ep=eom,band=0;
-    for(i=0;i<n;i++) {
-        while(ep<eo[i+1]) {
-            e=*ep;
-            if((e-i)>band) band=e-i;
-            ep++;
-        }
-    }
-    band=3*band+2;
-    return band;
+    return en;*/
+    return 0;
 }
 
 /** Centralizes the mesh, and calculates its square width in each of the three
@@ -500,193 +319,6 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
         wx+=*p*(*p);wy+=p[1]*p[1];wz+=p[2]*p[2];
     }
     wx*=fac;wy*=fac;wz*=fac;
-}
-
-/** Computes the accelerations based on the bending sheet model.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::accel_bsheet(double *in,double *acc) {
-    int i,*edp=*ed,j,j2,k;
-
-    for(i=0;i<n;i++) if(edp!=ed[i+1]) {
-
-        // Cycle around the edges. Remember the first connected vertex.
-        j=*(edp++);
-        if(i<j) edge_force(in,acc,i,j);
-
-        if(edp<ed[i+1]) {
-            j2=*edp;
-
-            // Loop over the other vertices
-            while(edp+1<ed[i+1]) {
-                k=*(edp++);
-                if(i<k) {
-                    edge_force(in,acc,i,k);
-                    triangle_force(in,acc,i,edp[-2],k,*edp);
-                }
-            }
-            k=*edp;
-            if(i<k) edge_force(in,acc,i,k);
-
-            // Add triangles to make a complete loop, if this is not a boundary
-            // vertex
-            if((ncn[i]&bflag)==0) {
-                if(i<k) triangle_force(in,acc,i,edp[-1],k,j);
-                if(i<j) triangle_force(in,acc,i,k,j,j2);
-            }
-            edp++;
-        }
-    }
-}
-
-/** Computes the accelerations based on the bending sheet model.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations (cumulative). */
-double mesh::energy_bsheet(double *in) {
-    int i,*edp=*ed,j,j2,k;double ee=0.,et=0.;
-
-    for(i=0;i<n;i++) if(edp!=ed[i+1]) {
-
-        // Cycle around the edges. Remember the first connected vertex.
-        j=*(edp++);
-        if(i<j) ee+=edge_energy(in,i,j);
-
-        if(edp<ed[i+1]) {
-            j2=*edp;
-
-            // Loop over the other vertices
-            while(edp+1<ed[i+1]) {
-                k=*(edp++);
-                if(i<k) {
-                    ee+=edge_energy(in,i,k);
-                    et+=triangle_energy(in,i,edp[-2],k,*edp);
-                }
-            }
-            k=*edp;
-            if(i<k) ee+=edge_energy(in,i,k);
-
-            // Add triangles to make a complete loop, if this is not a boundary
-            // vertex
-            if((ncn[i]&bflag)==0) {
-                if(i<k) et+=triangle_energy(in,i,edp[-1],k,j);
-                if(i<j) et+=triangle_energy(in,i,k,j,j2);
-            }
-            edp++;
-        }
-    }
-
-    // Scale the accumulators by the physical constants
-    return kappa*et+0.5*K*ee;
-}
-
-/** Adds the force due to an edge in the bendable sheet model.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations.
- * \param[in] (i,k) the two vertices that the edge connects. */
-void mesh::edge_force(double *in,double *acc,int i,int k) {
-    double *ii=in+3*i,*ik=in+3*k,*ai=acc+3*i,*ak=acc+3*k,
-           dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2],
-           rs=1./sqrt(dx*dx+dy*dy+dz*dz)-1;
-
-    // Add the force contributions to the two vertices
-    dx*=rs*K;dy*=rs*K;dz*=rs*K;
-    *ai+=dx;ai[1]+=dy;ai[2]+=dz;
-    *ak-=dx;ak[1]-=dy;ak[2]-=dz;
-}
-
-/** Calculates the acceleration due to the angle between two adjacent triangles
- * (i,j,k) and (i,j,l) in the bendable sheet model. \param[in] in the mesh
- * point positions.
- * \param[in] (i,j,k,l) the four vertices defining the two triangles.
- * \return The energy. */
-void mesh::triangle_force(double *in,double *acc,int i,int j,int k,int l) {
-    double *ii=in+3*i,*ij=in+3*j,*ik=in+3*k,*il=in+3*l,ne,nf,sp,fac;
-    vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
-         c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-         d(*il-*ii,il[1]-ii[1],il[2]-ii[2]),e,f,u,v,a0,a1,a2,a3;
-
-    // Compute normals to the triangles
-    e=b*c;
-    f=c*d;
-    ne=1./mod_sq(e);
-    nf=1./mod_sq(f);
-
-    // Compute forces on the four vertices
-    fac=kappa*sqrt(ne*nf);sp=dot(e,f);
-    u=fac*(f-ne*sp*e);
-    v=fac*(nf*sp*f-e);
-    a1=c*u;
-    a2=-b*u-d*v;
-    a3=c*v;
-
-    // Add forces to the acc array. Rather than compute the force on vertex i,
-    // obtain it by subtracting the other three.
-    a0=-a1-a2-a3;
-    a0.add(acc+3*i);
-    a1.add(acc+3*j);
-    a2.add(acc+3*k);
-    a3.add(acc+3*l);
-}
-
-/** Calculates the (unnormalized) energy due to an edge in the bendable sheet
- * model.
- * \param[in] in the mesh point positions.
- * \param[in] (i,k) the two vertices that the edge connects.
- * \return The energy. */
-double mesh::edge_energy(double *in,int i,int k) {
-    double *ii=in+3*i,*ik=in+3*k,
-           dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2],
-           val=sqrt(dx*dx+dy*dy+dz*dz)-1;
-    return val*val;
-}
-
-/** Calculates the (unnormalized) energy due to the angle between two adjacent
- * triangles (i,j,k) and (i,j,l) in the bendable sheet model.
- * \param[in] in the mesh point positions.
- * \param[in] (i,j,k,l) the four vertices defining the two triangles.
- * \return The energy. */
-double mesh::triangle_energy(double *in,int i,int j,int k,int l) {
-    double *ii=in+3*i,*ij=in+3*j,*ik=in+3*k,*il=in+3*l;
-    vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
-         c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-         d(*il-*ii,il[1]-ii[1],il[2]-ii[2]),e,f;
-
-    // Compute normals to the triangles
-    e=b*c;
-    f=c*d;
-
-    // Compute the energy contribution
-    return 1-dot(e,f)/sqrt(mod_sq(e)*mod_sq(f));
-}
-
-double mesh::edge_factor(double *in,int i,int j,int k,int l) {
-    double *ii=in+3*i,*ij=in+3*j,*ik=in+3*k,*il=in+3*l;
-    vec3 e1(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
-         e0(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-         e2(*il-*ii,il[1]-ii[1],il[2]-ii[2]),n1,n2;
-
-    // Compute normals to the triangles
-    n1=e0*e1;
-    n2=-e0*e2;
-
-    // Return the ratio of the hinge length squared to sum of adjacent triangle areas.
-    return 2*mod_sq(e0)/(sqrt(mod_sq(n1))+sqrt(mod_sq(n2)));
-}
-
-void mesh::stretch_force(double *in,double *acc,int i,int k,double sf) {
-    double *ii=in+3*i,*ik=in+3*k,*ai=acc+3*i,*ak=acc+3*k,
-           dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2],
-           rs=sf/sqrt(dx*dx+dy*dy+dz*dz)-1;
-
-    // Add the force contributions to the two vertices
-	if(rand_st) {
-		dx*=rs*kss[i];dy*=rs*kss[i];dz*=rs*kss[i];
-	}
-	else {
-		dx*=rs*K;dy*=rs*K;dz*=rs*K;
-	}
-    *ai+=dx;ai[1]+=dy;ai[2]+=dz;
-    *ak-=dx;ak[1]-=dy;ak[2]-=dz;
 }
 
 /** Calculates the acceleration due to the contraction of nodes
@@ -735,45 +367,6 @@ void mesh::repulsive_force(double *in,double *acc,int i,int k) {
         ak[1]-=dy;
         ak[2]-=dz;
     }
-}
-
-/** Calculates the acceleration due to the angle between two adjacent triangles
- * (i,j,k) and (i,j,l) in the bendable sheet model with random mesh.
- * \param[in] in the mesh point positions.
- * \param[in] (i,j,k,l) the four vertices defining the two triangles.
- * \return The energy. */
-void mesh::bend_force(double *in,double *acc,int i,int j,int k,int l,double ef) {
-    double *ii=in+3*i,*ij=in+3*j,*ik=in+3*k,*il=in+3*l,ne,nf,sp,fac;
-    vec3 b(*ij-*ii,ij[1]-ii[1],ij[2]-ii[2]),
-         c(*ik-*ii,ik[1]-ii[1],ik[2]-ii[2]),
-         d(*il-*ii,il[1]-ii[1],il[2]-ii[2]),e,f,u,v,a0,a1,a2,a3;
-
-    // Compute normals to the triangles
-    e=b*c;
-    f=c*d;
-    ne=1./mod_sq(e);
-    nf=1./mod_sq(f);
-
-    // Compute forces on the four vertices
-	if(rand_b) {
-		fac=sqrt(3)/2*kappas[i]*ef*sqrt(ne*nf);sp=dot(e,f);
-	}
-	else {
-		fac=sqrt(3)/2*kappa*ef*sqrt(ne*nf);sp=dot(e,f);
-	}
-    u=fac*(f-ne*sp*e);
-    v=fac*(nf*sp*f-e);
-    a1=c*u;
-    a2=-b*u-d*v;
-    a3=c*v;
-
-    // Add forces to the acc array. Rather than compute the force on vertex i,
-    // obtain it by subtracting the other three.
-    a0=-a1-a2-a3;
-    a0.add(acc+3*i);
-    a1.add(acc+3*j);
-    a2.add(acc+3*k);
-    a3.add(acc+3*l);
 }
 
 /** Adds an external potential to the class.
