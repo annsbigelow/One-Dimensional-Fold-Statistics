@@ -59,6 +59,9 @@ mesh::~mesh() {
 		delete[] shs; delete[] kappas; delete[] kss;
 		gsl_rng_free(rng);
 	}
+
+	// FEM terms
+	delete[] M;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -120,15 +123,47 @@ void mesh::setup_springs() {
         }
         edp++;
     }
-
-    // TODO - initialize lumped mass diagnonal entries []. Note that by this
-    // point the table of triangles is available.
-
+	
+	// Initialize diagonal mass matrix in FEM computations
+	M=new double[3*n]; arr_zeros(M,3*n);
+	double mass=rho/6;
+	top=tom;
+	// Loop through generating indices
+	for(int Ti=0;Ti<n;Ti++) {
+		while(top<to[Ti+1]) {
+			// Get coordinates from ref. domain
+			int v[3]={Ti,*top,top[1]};
+			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
+					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
+					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
+			// Reference mapping
+			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+			double adetF=std::abs(detF);
+			mass*=adetF;
+			if (adetF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
+			// Loop through nodes and vector components of nodes to assemble M
+			for (int i=0;i<3;i++)
+			for (int k=0;k<3;k++) M[3*v[i]+k]+=mass;
+			top+=2;
+		}
+	}
+	// DIAGNOSTIC: Check whether M is singular, and print elements. 
+	printf("Mass matrix:\n");
+	for (int i=0;i<3*n;i++) {
+		if (M[i]<1e-16) fprintf(stderr, "Mass matrix is singular.\n");
+		printf("%g\n",M[i]);
+	}
+	printf("End mass matrix diagnostic.\n");
+	
     if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
 	}
+}
+
+void mesh::arr_zeros(double *A,int size) {
+	for (int i=0;i<size;i++) A[i]=0.;
 }
 
 void mesh::print_triangle_table() {
@@ -161,17 +196,12 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
 
-    // TODO - in initialization, build a table of the lumped mass matrix
-    // diagonal entries; this will likely just work out as proportional to
-    // triangle areas in the original mesh file. Write M[i] as mass at vertex
-    // i.
-
     // This line initializes an air-resistance-type drag on the nodes. It
     // should work out that the (accelaration) = - (const.)*(velocity). TODO -
     // at vertex i, set equal to = - (const.)*(vel)*M[i].
     for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
 
-    // Add forces coming from finite-element computations
+    // Add forces coming from finite-element (FEM) computations
     fem_forces(t_,in,acc);
 
     // XXX - we can ignore this for now

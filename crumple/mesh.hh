@@ -83,6 +83,8 @@ class mesh : public mesh_param {
         int **to;
         /** Memory for one-sided triangle information. */
         int *tom;
+		/** FEM Mass matrix */
+		double *M;
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
@@ -109,6 +111,7 @@ class mesh : public mesh_param {
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
+		void arr_zeros(double* A, int size);
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
