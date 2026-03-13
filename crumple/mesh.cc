@@ -61,7 +61,7 @@ mesh::~mesh() {
 	}
 
 	// FEM terms
-	delete[] M;
+	delete[] M; delete[] P;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -124,8 +124,9 @@ void mesh::setup_springs() {
         edp++;
     }
 	
-	// Initialize diagonal mass matrix in FEM computations
+	// Initialize diagonal mass matrix and force vector in FEM computations
 	M=new double[3*n]; arr_zeros(M,3*n);
+	P=new double[3*n]; arr_zeros(P,3*n);
 	double mass=rho/6;
 	top=tom;
 	// Loop through generating indices
@@ -197,9 +198,12 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     int i;
 
     // This line initializes an air-resistance-type drag on the nodes. It
-    // should work out that the (accelaration) = - (const.)*(velocity). TODO -
-    // at vertex i, set equal to = - (const.)*(vel)*M[i].
-    for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
+    // should work out that the (acceleration) = - (const.)*(velocity).
+    //for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
+
+	// At vertex i, set equal to = - (const.)*(vel)*M[i].
+	// Q: Why aren't we dividing by M[i] here?
+	for(double *ap=acc,*vp=in+3*n,*Mp=M;ap<acc+3*n;) *(ap++)=-*(vp++)*drag / *(Mp++);
 
     // Add forces coming from finite-element (FEM) computations
     fem_forces(t_,in,acc);
@@ -207,8 +211,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // XXX - we can ignore this for now
     // contact_forces(in,out);
 
-    // TODO - divide all terms in the acceleration array by the corresponding
-    // M[i]. (Essentially applying Newton's second law, a=F/m.
+	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -291,29 +294,92 @@ void mesh::contact_forces(double *in,double *out) {
     }
 }
 
-/** Computes the finite-elements due from sheet mechanics.
+/** Computes the finite-elements forces from sheet mechanics.
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions.
- * \param[in] out the mesh point accelerations (cumulative). */
+ * \param[in] acc the mesh point forces (cumulative). */
 void mesh::fem_forces(double t_,double *in,double *acc) {
+	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
+	int dPdX[6]={-1,1,0, -1,0,1};
 
-    // TODO - implement FEM computations for P integrals
-    // Compute accelerations from the sheet
     int *top=tom;
-    for(int i=0;i<n;i++) {
-
-        // This loop will go over all triangles in the table with i as the
-        // smallest vertex
-        while(top<to[i+1]) {
-            printf("(%d,%d,%d)\n",i,*top,top[1]);
-            // TODO - evaluate FEM computations for triangle (i,*top,top[1])
-
+    for(int Ti=0;Ti<n;Ti++) {
+        while(top<to[Ti+1]) {
+			int v[3]={Ti,*top,top[1]};
+			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
+					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
+					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
+			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
+			double detF=F[0]*F[3]-F[1]*F[2];
+			for (int i=0;i<3;i++)
+			for (int k=0;k<3;k++) {
+				double hatP_k[2];
+				get_hatP(hatP_k,k,in,dPdX);
+				double Ak=detF*(hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1));
+				int tmp=(detF>0?1:-1);
+				P[3*v[i]+k]+=tmp*Ak/2;
+			}
             top+=2;
         }
     }
-
     // Add accelerations from the external potentials
     //for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
+}
+
+/* Compute a row of the block matrix P_hat used FEM force calculations */
+void mesh::get_hatP(double(&hatP_k)[2],int k,double *q,int dPdX[6]) {
+	double C=0.;
+	double D[2]={0.,0.};
+	double E[2]={0.,0.};
+	for (int p=0;p<3;p++) {
+		double A=qSum(q,p,dPdX,0), B=qSum(q,p,dPdX,1);
+		C+=A*A+B*B;
+		D[0]+=A*A; D[1]+=A*B;
+		E[0]+=B*A; E[1]+=B*B;
+	}
+	for (int l=0;l<2;l++) hatP_k[l] = qSum(q,k,dPdX,0) * (lambda*(C-2) * (l==0?1:0)/2 + mu_fem*(D[l]-(l==0?1:0))) +
+										qSum(q,k,dPdX,1) * (lambda*(C-2) * (l==1?1:0)/2 + mu_fem*(E[l]-(l==1?1:0)));
+}
+
+/** Sums q_i[k]\nabla\psi over all elements. Used in computing the stress \hat P.
+*	\param[in] k the component of q
+*	\param[in] m the component of X to differentiate with respect to
+*/
+double mesh::qSum(double *q,int k,int dPdX[6],int m) {
+	double result=0.;
+	int* top=tom;
+	for (int Ti=0;Ti<n; Ti++) {
+		while (top<to[Ti+1]) {
+			int v[3]={Ti,*top,top[1]};
+			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
+					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
+					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
+			double F[4]={ x2-x1,x3-x1,y2-y1,y3-y1 };
+			double detF=F[0]*F[3] - F[1]*F[2];
+			for (int i=0;i<3;i++) {
+				int I=v[i];
+				if (I>n) { //DIAGNOSTIC
+					fprintf(stderr, "Error: velocity components of array 'in' accessed when they shouldn't be.\n");
+					return 1;
+				}
+				// Choose the current I-th node and sum all contributions
+				double* qi=q+3*I;
+				result+=qi[k]*FdPI(F,detF,dPdX,i,m);
+			}
+			top+=2;
+		}
+	}
+	return result;
+}
+
+/** A component of the inverse-transpose of the reference mapping matrix
+	multiplied by the gradient of a basis function. */
+double mesh::FdPI(double F[4],double detF,int dPdX[6],int i,int m) {
+	if (m==0) return ((double)dPdX[i]*F[3] - (double)dPdX[3+i]*F[2])/detF;
+	else if (m==1) return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
+	else {
+		fprintf(stderr, "Inputted index m in FdPI function is out of bounds.\n"); return 1;
+	}
 }
 
 /** Computes the energy.

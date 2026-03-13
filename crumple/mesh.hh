@@ -85,6 +85,8 @@ class mesh : public mesh_param {
         int *tom;
 		/** FEM Mass matrix */
 		double *M;
+		/** FEM Forcing vector */
+		double *P;
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
@@ -104,14 +106,19 @@ class mesh : public mesh_param {
         double energy(double t_,double *in);
         int bandwidth();
         void add(ext_potential *ep);
-		void gen_spring_params_rec(double* out, double mu, double sig, int nx, int ny);
-		// Roughness (deformation) functions
+		void gen_spring_params_rec(double* out,double mu,double sig,int nx,int ny);
+		/** Roughness (deformation) functions */
 		void Sq_Sa(double& Sq,double& Sa,int nx,int ny);
 		double Sdr(int nx,int ny);
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
+		/** FEM Helper Functions */
 		void arr_zeros(double* A, int size);
+		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
+		double qSum(double* q,int k,int dPdX[6],int m);
+		void get_hatP(double(&hatP_k)[2],int k,double* q,int dPdX[6]);
+
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
         inline void draw_nodes(const char *filename) {
