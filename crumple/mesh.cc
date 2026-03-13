@@ -297,7 +297,7 @@ void mesh::contact_forces(double *in,double *out) {
 /** Computes the finite-elements forces from sheet mechanics.
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point forces (cumulative). */
+ * \param[in] acc the mesh point accelerations (cumulative). */
 void mesh::fem_forces(double t_,double *in,double *acc) {
 	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
 	int dPdX[6]={-1,1,0, -1,0,1};

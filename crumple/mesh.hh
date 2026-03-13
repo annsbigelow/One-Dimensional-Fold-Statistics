@@ -79,9 +79,9 @@ class mesh : public mesh_param {
         double *reg;
         /** Relaxed edge factors for bending rigidity. */
         double *ref;
-        /** Pointers to the one-sided triangle information. */
+        /** Pointers to the triangular elements of the mesh. */
         int **to;
-        /** Memory for one-sided triangle information. */
+        /** Memory for the triangular elements of the mesh. */
         int *tom;
 		/** FEM Mass matrix */
 		double *M;

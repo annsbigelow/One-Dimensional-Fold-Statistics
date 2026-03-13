@@ -73,14 +73,14 @@ void mesh::Sq_Sa(double& Sq,double& Sa,int nx, int ny) {
 *	\param[in] nx,ny The dimensions of the sheet.
 */
 double mesh::tot_area_rec(int nx, int ny) {
-	int* tp = to[0], i, k, l, ci, cj, di, dj, ei, ej, nt, nt1, nt2;
+	int *top=tom, i, k, l, ci, cj, di, dj, ei, ej, nt, nt1, nt2;
 	double A=0., magn;
 	// Make sure all triangles are counted 
 	//FILE* fp2 = safe_fopen("tri_int.gnu", "wb");
 
-	// Loop through all of the triangles
-	for (i=0;i<n;i++) while (tp<to[i+1]) {
-		k=tp[1], l=tp[2];
+	// Loop through all of the unique triangles
+	for (i=0;i<n;i++) while (top<to[i+1]) {
+		k=*top, l=top[1];
 		// Check if i,k,l are ALL within the interior. If not, don't add the area to the total.
 		ci=0, cj=i, di=0, dj=k, ei=0, ej=l;
 		nt=find_pos_rec(ci,cj,nx); nt1=find_pos_rec(di,dj,nx); nt2=find_pos_rec(ei,ej,nx);
@@ -95,7 +95,7 @@ double mesh::tot_area_rec(int nx, int ny) {
 			e=d*c; magn=e.magnitude();
 			A+=magn/2;
 		}
-		tp+=3;
+		top+=2;
 	}
 	//fclose(fp2);
 	return A;
