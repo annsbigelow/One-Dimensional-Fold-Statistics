@@ -126,9 +126,9 @@ void mesh::setup_springs() {
 	
 	// Initialize diagonal mass matrix and force vector in FEM computations
 	M=new double[3*n]; arr_zeros(M,3*n);
-	P=new double[3*n]; arr_zeros(P,3*n);
-	double mass=rho/6;
+	P=new double[3*n];
 	top=tom;
+	double a=rho/6;
 	// Loop through generating indices
 	for(int Ti=0;Ti<n;Ti++) {
 		while(top<to[Ti+1]) {
@@ -138,9 +138,8 @@ void mesh::setup_springs() {
 					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
 			// Reference mapping
-			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-			double adetF=std::abs(detF);
-			mass*=adetF;
+			double adetF=std::abs((x2-x1)*(y3-y1)-(x3-x1)*(y2-y1));
+			double mass=adetF*a;
 			if (adetF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
 			// Loop through nodes and vector components of nodes to assemble M
 			for (int i=0;i<3;i++)
@@ -206,6 +205,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	for(double *ap=acc,*vp=in+3*n,*Mp=M;ap<acc+3*n;) *(ap++)=-*(vp++)*drag / *(Mp++);
 
     // Add forces coming from finite-element (FEM) computations
+	arr_zeros(P,3*n);
     fem_forces(t_,in,acc);
 
     // XXX - we can ignore this for now
@@ -315,7 +315,7 @@ void mesh::fem_forces(double t_,double *in,double *acc) {
 			for (int k=0;k<3;k++) {
 				double hatP_k[2];
 				get_hatP(hatP_k,k,in,dPdX);
-				double Ak=detF*(hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1));
+				double Ak=hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1);
 				int tmp=(detF>0?1:-1);
 				P[3*v[i]+k]+=tmp*Ak/2;
 			}
