@@ -10,7 +10,7 @@
  * \param[in] mp a mesh_param structure containing simulation constants.
  * \param[in] filename the file to read from. */
 mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
-    n_ep(0), reg(NULL), odir(NULL) {
+    n_ep(0), odir(NULL) {
     FILE *fp=safe_fopen(filename,"rb");
     read_topology(fp);
     read_positions(fp);
@@ -26,7 +26,7 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
  * \param[in] f_topo the file to read the mesh topology from.
  * \param[in] f_pts the file to read the vertex positions from. */
 mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
-    mesh_param(mp), n_ep(0), reg(NULL), odir(NULL) {
+    mesh_param(mp), n_ep(0), odir(NULL) {
 
     // Read in the mesh topology
     FILE *fp=safe_fopen(f_topo,"rb");
@@ -47,10 +47,8 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
 /** The class destructor frees the dynamically allocated memory. */
 mesh::~mesh() {
     if(odir!=NULL) delete [] odir;
-    if(reg!=NULL) {
-    if(bsheet_model) {delete [] ref; delete [] tom; delete [] to;}
-    delete [] reg; delete [] eom; delete [] eo;
-    }
+    if(bsheet_model) { delete [] tom; delete [] to;}
+     delete [] eom; delete [] eo;
     delete [] edm;delete [] ed;
     delete [] ncn;
     delete [] pts;
@@ -68,6 +66,9 @@ mesh::~mesh() {
  * be fully relaxed. Sets up the boundaries of the subsheet, if applicable.
  */
 void mesh::setup_springs() {
+	// Copy initial positions to define the reference configuration
+	sh_pts = new double[3*n];
+	std::memcpy(sh_pts,pts,3*n*sizeof(double));
 
     // For this case, the number of springs will just be half the number of
     // connections
@@ -148,12 +149,12 @@ void mesh::setup_springs() {
 		}
 	}
 	// DIAGNOSTIC: Check whether M is singular, and print elements. 
-	printf("Mass matrix:\n");
+	//printf("Mass matrix:\n");
 	for (int i=0;i<3*n;i++) {
 		if (M[i]<1e-16) fprintf(stderr, "Mass matrix is singular.\n");
-		printf("%g\n",M[i]);
+		//printf("%g\n",M[i]);
 	}
-	printf("End mass matrix diagnostic.\n");
+	//printf("End mass matrix diagnostic.\n");
 	
     if(shrink) {
 		set_scale=1.;
@@ -176,6 +177,13 @@ void mesh::print_triangle_table() {
     }
 }
 
+void mesh::print_pts(double *pt_array) {
+	for (int i = 0; i < n; i++) {
+		double* pt = pt_array + 3 * i;
+		printf("pts[%d]=(%g,%g,%g)\n", i, pt[0], pt[1], pt[2]);
+	}
+}
+
 /** Copies initial node positions in the presence of a shrinking substrate and applies
 *	a random perturbation to the rate of each contracting node.
 *	\param[in] shflag, bendflag, stflag: Flags setting the choices to use random spring constants.
@@ -183,8 +191,7 @@ void mesh::print_triangle_table() {
 */
 void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
 	double ksm,double ksv,int nx,int ny) {
-	sh_pts=new double[3*n]; shs=new double[n]; kappas=new double[n]; kss=new double[n];
-	std::memcpy(sh_pts,pts,3*n*sizeof(double));
+	shs=new double[n]; kappas=new double[n]; kss=new double[n];
 	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
 
 	if(rand_sh) gen_spring_params_rec(shs,shm,shv,nx,ny);
@@ -195,7 +202,7 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double s
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
-
+	//print_pts(in);
     // This line initializes an air-resistance-type drag on the nodes. It
     // should work out that the (acceleration) = - (const.)*(velocity).
     //for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
@@ -301,7 +308,7 @@ void mesh::contact_forces(double *in,double *out) {
 void mesh::fem_forces(double t_,double *in,double *acc) {
 	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
 	int dPdX[6]={-1,1,0, -1,0,1};
-
+	
     int *top=tom;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {

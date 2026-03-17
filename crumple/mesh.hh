@@ -75,10 +75,6 @@ class mesh : public mesh_param {
         int **eo;
         /** Memory for the one-sided connection information. */
         int *eom;
-        /** Relaxed edge lengths. */
-        double *reg;
-        /** Relaxed edge factors for bending rigidity. */
-        double *ref;
         /** Pointers to the triangular elements of the mesh. */
         int **to;
         /** Memory for the triangular elements of the mesh. */
@@ -114,6 +110,7 @@ class mesh : public mesh_param {
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
 		/** FEM Helper Functions */
+		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
 		double qSum(double* q,int k,int dPdX[6],int m);
