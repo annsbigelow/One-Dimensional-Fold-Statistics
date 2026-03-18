@@ -153,6 +153,7 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
                     do_count++;print_dense(do_count,t_final,q);
                     num_acc=num_tot=0;
                 }
+				//print_step();
                 return;
             }
         }

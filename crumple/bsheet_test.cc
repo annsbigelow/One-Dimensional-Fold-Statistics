@@ -8,7 +8,7 @@ int main() {
 
     // Create mesh and initialize acceleration
     mesh_param par(0.05,0.02,0.001,false,false);
-    mesh_rk4 mp(par,"sheet_0.3_3x3.bin");
+    mesh_rk4 mp(par,"sheet_1_3x3.bin");
 
     // Centralize and scale the mesh
     double wx,wy,wz;
@@ -27,8 +27,8 @@ int main() {
     //for(double *p=mp.ref;p<mp.ref+mp.nh;p++) *p=2./sqrt(3);
 	
     // Perturb the z positions
-    for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3)
-       p[2]+=1e-3*sin(*p*(*p)-p[1]*p[1])*exp(-(*p*(*p)+p[1]*p[1]));
+    //for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3)
+      // p[2]+=1e-3*sin(*p*(*p)-p[1]*p[1])*exp(-(*p*(*p)+p[1]*p[1]));
 	
     // Add centering potential
     ep_centering epc(0.001);
@@ -36,12 +36,13 @@ int main() {
 	
     // Setup the output directory and allocate memory for integrator.
     mp.setup_output_dir("brun_d.out");
-    mp.allocate(6*mp.n);
+    //mp.allocate(6*mp.n); // XXX - Mesh constructor already allocates mem
 	
-	mp.print_pts(mp.pts);
+	//mp.print_pts(mp.pts);
     // Carry out the simulation, reporting the time to compute the timesteps
     // between each output frame
-    mp.solve_adaptive(1,1e-4,1e-4,false,101); // this is equivalent to running section below:
+    mp.solve_adaptive(1,1e-4,1e-4,false,1); // this is equivalent to running section below:
+
     /*
     mp.output_positions(0);
     puts("Frame 0");

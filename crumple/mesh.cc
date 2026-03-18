@@ -180,7 +180,7 @@ void mesh::print_triangle_table() {
 void mesh::print_pts(double *pt_array) {
 	for (int i = 0; i < n; i++) {
 		double* pt = pt_array + 3 * i;
-		printf("pts[%d]=(%g,%g,%g)\n", i, pt[0], pt[1], pt[2]);
+		printf("(%g,%g,%g)\n", pt[0], pt[1], pt[2]);
 	}
 }
 
@@ -202,7 +202,7 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double s
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
-	//print_pts(in);
+	
     // This line initializes an air-resistance-type drag on the nodes. It
     // should work out that the (acceleration) = - (const.)*(velocity).
     //for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
@@ -213,12 +213,12 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 
     // Add forces coming from finite-element (FEM) computations
 	arr_zeros(P,3*n);
-    fem_forces(t_,in,acc);
+    fem_forces(t_,in);
 
     // XXX - we can ignore this for now
     // contact_forces(in,out);
 
-	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
+	//for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -303,9 +303,8 @@ void mesh::contact_forces(double *in,double *out) {
 
 /** Computes the finite-elements forces from sheet mechanics.
  * \param[in] t_ the time at which to evaluate the acceleration.
- * \param[in] in the mesh point positions.
- * \param[in] acc the mesh point accelerations (cumulative). */
-void mesh::fem_forces(double t_,double *in,double *acc) {
+ * \param[in] in the mesh point positions. */
+void mesh::fem_forces(double t_,double *in) {
 	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
 	int dPdX[6]={-1,1,0, -1,0,1};
 	
@@ -318,10 +317,11 @@ void mesh::fem_forces(double t_,double *in,double *acc) {
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
 			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
 			double detF=F[0]*F[3]-F[1]*F[2];
-			for (int i=0;i<3;i++)
-			for (int k=0;k<3;k++) {
+			for (int i=0;i<3;i++) // Loop through triangle vertices
+			for (int k=0;k<3;k++) { // Loop through vector components
 				double hatP_k[2];
-				get_hatP(hatP_k,k,in,dPdX);
+				double *qT[3]={in+3*v[0], in+3*v[1], in+3*v[2]};
+				get_hatP(hatP_k,k,qT,dPdX,F,detF);
 				double Ak=hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1);
 				int tmp=(detF>0?1:-1);
 				P[3*v[i]+k]+=tmp*Ak/2;
@@ -333,48 +333,30 @@ void mesh::fem_forces(double t_,double *in,double *acc) {
     //for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
 }
 
-/* Compute a row of the block matrix P_hat used FEM force calculations */
-void mesh::get_hatP(double(&hatP_k)[2],int k,double *q,int dPdX[6]) {
+/* Compute a row of the block matrix P_hat used FEM force calculations. 
+*	\param[in] v the triangle vertices
+*	\param[in] k the row of P to return
+*/
+void mesh::get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF) {
 	double C=0.;
-	double D[2]={0.,0.};
-	double E[2]={0.,0.};
+	double D[4]={0.,0.,0.,0.};
+	// Could make this more efficient to reuse gradq values
 	for (int p=0;p<3;p++) {
-		double A=qSum(q,p,dPdX,0), B=qSum(q,p,dPdX,1);
+		double A=gradq(qT,p,dPdX,0,F,detF), B=gradq(qT,p,dPdX,1,F,detF);
 		C+=A*A+B*B;
 		D[0]+=A*A; D[1]+=A*B;
-		E[0]+=B*A; E[1]+=B*B;
+		D[2]+=B*A; D[3]+=B*B;
 	}
-	for (int l=0;l<2;l++) hatP_k[l] = qSum(q,k,dPdX,0) * (lambda*(C-2) * (l==0?1:0)/2 + mu_fem*(D[l]-(l==0?1:0))) +
-										qSum(q,k,dPdX,1) * (lambda*(C-2) * (l==1?1:0)/2 + mu_fem*(E[l]-(l==1?1:0)));
+	for (int l=0;l<2;l++) hatP_k[l] = gradq(qT,k,dPdX,0,F,detF) * (lambda*(C-2) * (l==0?1:0)/2 + mu_fem*(D[l]-(l==0?1:0))) +
+										gradq(qT,k,dPdX,1,F,detF) * (lambda*(C-2) * (l==1?1:0)/2 + mu_fem*(D[l+2]-(l==1?1:0)));
 }
 
-/** Sums q_i[k]\nabla\psi over all elements. Used in computing the stress \hat P.
-*	\param[in] k the component of q
-*	\param[in] m the component of X to differentiate with respect to
-*/
-double mesh::qSum(double *q,int k,int dPdX[6],int m) {
+/** Computes the k-th component of grad q on a particular element. */
+double mesh::gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF) {
 	double result=0.;
-	int* top=tom;
-	for (int Ti=0;Ti<n; Ti++) {
-		while (top<to[Ti+1]) {
-			int v[3]={Ti,*top,top[1]};
-			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
-					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
-					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
-			double F[4]={ x2-x1,x3-x1,y2-y1,y3-y1 };
-			double detF=F[0]*F[3] - F[1]*F[2];
-			for (int i=0;i<3;i++) {
-				int I=v[i];
-				if (I>n) { //DIAGNOSTIC
-					fprintf(stderr, "Error: velocity components of array 'in' accessed when they shouldn't be.\n");
-					return 1;
-				}
-				// Choose the current I-th node and sum all contributions
-				double* qi=q+3*I;
-				result+=qi[k]*FdPI(F,detF,dPdX,i,m);
-			}
-			top+=2;
-		}
+	for (int i=0;i<3;i++){ // Loop through triangle vertices
+		double *qTi=qT[i];
+		result+=qTi[k]*FdPI(F,detF,dPdX,i,m);
 	}
 	return result;
 }
