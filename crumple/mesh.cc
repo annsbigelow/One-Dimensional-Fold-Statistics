@@ -156,11 +156,11 @@ void mesh::setup_springs() {
 	}
 	//printf("End mass matrix diagnostic.\n");
 	
-    if(shrink) {
+    //if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
-	}
+	//}
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -218,7 +218,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // XXX - we can ignore this for now
     // contact_forces(in,out);
 
-	//for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
+	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -334,7 +334,6 @@ void mesh::fem_forces(double t_,double *in) {
 }
 
 /* Compute a row of the block matrix P_hat used FEM force calculations. 
-*	\param[in] v the triangle vertices
 *	\param[in] k the row of P to return
 */
 void mesh::get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF) {

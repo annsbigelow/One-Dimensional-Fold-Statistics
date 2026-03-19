@@ -56,28 +56,34 @@ int main(int argc,char **argv) {
 		// Setup triangle info and subsheet boundaries
 		mp->setup_springs();
 		// Print the roughness metrics
-		double Sq,Sa; mp->Sq_Sa(Sq,Sa,nx,ny);
+		double Sq,Sa,Sdq,Sdr; mp->Sq_Sa(Sq,Sa,nx,ny); mp->Sdq_Sdr(Sdq,Sdr,nx,ny,sed);
 		printf("Root mean square height: %g\nArithmetical mean height: %g\n",Sq,Sa);
 		printf("Sheet area: %g\n", mp->tot_area_rec(nx,ny));
+		printf("Root mean square gradient: %g\n",Sdq);
+		printf("Developed interfacial area ratio: %g\n",Sdr);
 		delete mp;
 	}
 	else {
 		double* sdevs = new double[fnum];
 		double* Sas=new double[fnum];
+		double* Sdqs=new double[fnum];
+		double* Sdrs=new double[fnum];
 		double* area_arr = new double[fnum];
 		// Read in the data for each frame
+		sprintf(f_topo, "%s/topo", argv[2]);
 		for(int j=0;j<fnum;j++) {
-			sprintf(f_topo, "%s/topo", argv[2]);
 			sprintf(f_pts, "%s/pts.%d", argv[2], j);
 			mp=new mesh(par, f_topo, f_pts);
 			mp->setup_springs();
 
-			double Sq,Sa;
+			double Sq,Sa,Sdq,Sdr;
 			mp->Sq_Sa(Sq,Sa,nx,ny);
+			mp->Sdq_Sdr(Sdq,Sdr,nx,ny,sed);
 			sdevs[j]=Sq;
 			Sas[j]=Sa;
 			area_arr[j]=mp->tot_area_rec(nx,ny);
-
+			Sdqs[j]=Sdq;
+			Sdrs[j]=Sdr;
 			delete mp;
 		}
 
@@ -91,10 +97,18 @@ int main(int argc,char **argv) {
 		FILE* fp2=safe_fopen("mean_heights.bin","wb");
 		fwrite(Sas,sizeof(double),fnum,fp2);
 		fclose(fp2);
+		FILE* fp3=safe_fopen("rmsq_grad.bin","wb");
+		FILE* fp4=safe_fopen("devintratio.bin","wb");
+		fwrite(Sdqs,sizeof(double),fnum,fp3);
+		fwrite(Sdrs,sizeof(double),fnum,fp4);
+		fclose(fp3);
+		fclose(fp4);
 
 		delete[] area_arr;
 		delete[] sdevs;
 		delete[] Sas;
+		delete[] Sdqs;
+		delete[] Sdrs;
 	}
 	delete[] f_topo;
 }

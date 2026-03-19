@@ -105,7 +105,7 @@ class mesh : public mesh_param {
 		void gen_spring_params_rec(double* out,double mu,double sig,int nx,int ny);
 		/** Roughness (deformation) functions */
 		void Sq_Sa(double& Sq,double& Sa,int nx,int ny);
-		double Sdr(int nx,int ny);
+		void Sdq_Sdr(double &Sdq,double &Sdr,int nx,int ny,double sed);
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);

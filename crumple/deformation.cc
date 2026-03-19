@@ -20,23 +20,37 @@ int mesh::find_pos_rec(int& row,int& col,int nx) {
 	return nt;
 }
 
-/** Calculates the Developed Interfacial Area Ratio as a roughness measure.
-*	(UNFINISHED)
+/** Calculates the Root Mean Square Gradient and Developed Interfacial Ratio as roughness measures.
+*	\param[out] Sdq the root mean square gradient.
+*	\param[out] Sdr the developed interfacial area ratio.
+*  TODO - check that results here make sense.
 */
-/*double mesh::Sdr(int nx,int ny) {
+void mesh::Sdq_Sdr(double &Sdq,double &Sdr,int nx,int ny,double sed) {
+	double sum=0., sum2=0.;
 	// Loop through all points 
 	for(int i=0;i<n;i++) {
 		int row=0, col=i;
 		// Check if the current point is within the subsheet, minus another layer (due to the gradient calculation)
 		int nt=find_pos_rec(row,col,nx);
+		int nnt;
+		if (nt==nx) nnt=nx+1;
+		else nnt=nx;
 		if(inside(row,col,nt,ny,R+1)) {
-			pt=pts+3*i; 
-			right=pts+3*(i+1); left=pts+3*(i-1); 
-			//up=pts+3*(i+nt)
+			double *right=pts+3*(i+1), *left=pts+3*(i-1), 
+					*upl=pts+3*(i+nt), *upr=pts+3*(i+nt+1),
+					*downl=pts+3*(i-nnt), *downr=pts+3*(i-nnt-1);
+			// Gradient discretizations
+			double A=5*(right[2]-left[2])/6, B=downl[2]-upr[2];
+			double Dx=(A+(B+upl[2]-downr[2])/3)/sed;
+			double Dy=(A+(B+4*upl[2]-4*downr[2])/3)/sed;
+			sum+=(Dx*Dx+Dy*Dy);
+			sum2+=std::sqrt(1+Dx*Dx+Dy*Dy)-1;
 		}
 	}
-	A=tot_area_rec(nx,ny);
-}*/
+	double A=tot_area_rec(nx,ny);
+	Sdq=std::sqrt(sum/A);
+	Sdr=sum2/A;
+}
 
 /** Calculates the statistical standard deviation of the height and the arithmetical mean height of the sheet.
 *	\param[in] nx,ny The dimensions of the sheet.
