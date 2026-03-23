@@ -137,7 +137,6 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
                     t_den=t_start+do_count*sf;
                     dense_output(1.+(t_den-t)/dt,dt);
                     print_dense(do_count,t_start+do_count*sf,k3);
-
                     num_acc=num_tot=0;
                 }
             }
@@ -153,7 +152,6 @@ void rk4::solve_adaptive(double duration,double atol,double rtol,bool output,int
                     do_count++;print_dense(do_count,t_final,q);
                     num_acc=num_tot=0;
                 }
-				//print_step();
                 return;
             }
         }
@@ -251,7 +249,7 @@ double rk4::step_and_error(double dt,double atol,double rtol) {
     // Perform FSAL step needed for error estimation, reusing k4 since it is no
     // longer needed
     ff(t+dt,dq,k4);fcount+=4;
-
+	
     // Compute normalized error estimate
     double err=0.,qhat,o;
     for(int i=0;i<dof;i++) {

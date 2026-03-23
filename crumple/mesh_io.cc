@@ -233,6 +233,7 @@ void mesh::output_topology(FILE *fp) {
 
 void mesh::mesh_print_dense(int fr,double t_,double *in) {
     printf("# Output frame %d (t=%g)\n",fr,t_);
+	//print_pts(pts);
     sprintf(obuf,"%s/pts.%d",odir,fr);
     FILE *fp=safe_fopen(obuf,"wb");
     fwrite(in,sizeof(double),3*n,fp);

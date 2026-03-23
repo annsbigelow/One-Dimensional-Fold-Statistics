@@ -180,8 +180,10 @@ void mesh::print_triangle_table() {
 void mesh::print_pts(double *pt_array) {
 	for (int i = 0; i < n; i++) {
 		double* pt = pt_array + 3 * i;
-		printf("(%g,%g,%g)\n", pt[0], pt[1], pt[2]);
+		printf("(%g,%g,%g)", pt[0], pt[1], pt[2]);
+		printf(" ");
 	}
+	printf("\n");
 }
 
 /** Copies initial node positions in the presence of a shrinking substrate and applies
@@ -207,8 +209,6 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // should work out that the (acceleration) = - (const.)*(velocity).
     //for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
 
-	// At vertex i, set equal to = - (const.)*(vel)*M[i].
-	// Q: Why aren't we dividing by M[i] here?
 	for(double *ap=acc,*vp=in+3*n,*Mp=M;ap<acc+3*n;) *(ap++)=-*(vp++)*drag / *(Mp++);
 
     // Add forces coming from finite-element (FEM) computations
@@ -218,7 +218,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     // XXX - we can ignore this for now
     // contact_forces(in,out);
 
-	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) = *(Fp++) / *(Mp++);
+	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
@@ -307,7 +307,7 @@ void mesh::contact_forces(double *in,double *out) {
 void mesh::fem_forces(double t_,double *in) {
 	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
 	int dPdX[6]={-1,1,0, -1,0,1};
-	
+
     int *top=tom;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {
@@ -317,6 +317,10 @@ void mesh::fem_forces(double t_,double *in) {
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
 			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
 			double detF=F[0]*F[3]-F[1]*F[2];
+			if (detF < 1e-12) { //DIAGNOSTIC 
+				fprintf(stderr,"Error: detF is small\n");
+				break;
+			}
 			for (int i=0;i<3;i++) // Loop through triangle vertices
 			for (int k=0;k<3;k++) { // Loop through vector components
 				double hatP_k[2];
@@ -325,6 +329,10 @@ void mesh::fem_forces(double t_,double *in) {
 				double Ak=hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1);
 				int tmp=(detF>0?1:-1);
 				P[3*v[i]+k]+=tmp*Ak/2;
+				//if (P[3*v[i]+k]>1e4) {// DIAGNOSTIC
+					//fprintf(stderr,"Error: P[node %d, component %d] is large.\n",v[i],k);
+					//break;
+				//}
 			}
             top+=2;
         }

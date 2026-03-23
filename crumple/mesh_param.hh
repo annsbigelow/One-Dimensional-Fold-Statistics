@@ -40,27 +40,27 @@ struct mesh_param {
     mesh_param(double K_,double drag_,bool fix_boundary_) : K(K_), drag(drag_),
         B(0.),  kappa(0.), sigma(0.), ks(0.), dashpot(false),
         bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
-		rho(1.), lambda(1.), mu_fem(1.) {}
+		rho(1.), lambda(7.5), mu_fem(3.75) {}
     mesh_param(double K_,double drag_,double B_,bool fix_boundary_) : K(K_), drag(drag_),
         B(B_), kappa(0.), sigma(0.), ks(0.), dashpot(true),
         bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
-		rho(1.), lambda(1.), mu_fem(1.) {}
+		rho(1.), lambda(7.5), mu_fem(3.75) {}
     mesh_param(double K_,double drag_,double B_,double kappa_,bool fix_boundary_) : K(K_), drag(drag_),
         B(B_), kappa(kappa_), sigma(0.), ks(0.), dashpot(true),
         bsheet_model(true), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
-		rho(1.), lambda(1.), mu_fem(1.) {}
+		rho(1.), lambda(7.5), mu_fem(3.75) {}
     mesh_param(double K_,double drag_,double kappa_,bool dashpot_,bool fix_boundary_) : K(K_), drag(drag_),
         B(0.), kappa(kappa_), sigma(0.), ks(0.), dashpot(dashpot_),
         bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
-		rho(1.), lambda(1.), mu_fem(1.) {}
+		rho(1.), lambda(7.5), mu_fem(3.75) {}
     mesh_param(double K_,double drag_,double B_,double kappa_,double diam_) : K(K_), drag(drag_),
         B(B_), kappa(kappa_), sigma(sqrt(3)), ks(0.), dashpot(true),
         bsheet_model(true), repulsion(true), diam(diam_), fix_boundary(false), shrink(false), sed(0.), rho(1.),
-		lambda(1.), mu_fem(1.) {}
+		lambda(7.5), mu_fem(3.75) {}
 	mesh_param(double K_,double drag_,double B_,double kappa_,bool fix_boundary_,bool shrink_,double diam_,double sed_) : K(K_), drag(drag_),
 		B(B_), kappa(kappa_), sigma(0.), ks(.001), dashpot(true),
 		bsheet_model(true), repulsion(false), diam(diam_), fix_boundary(fix_boundary_), shrink(shrink_), sed(sed_), rho(1.),
-		lambda(1.), mu_fem(1.) {}
+		lambda(7.5), mu_fem(3.75) {}
 };
 
 #endif

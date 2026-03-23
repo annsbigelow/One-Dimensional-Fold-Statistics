@@ -97,7 +97,6 @@ class mesh : public mesh_param {
         void setup_springs();
         void reset_relaxed();
         void contact_forces(double *in,double *out);
-        void fem_forces(double t_,double *in);
         void print_triangle_table();
         double energy(double t_,double *in);
         int bandwidth();
@@ -115,6 +114,7 @@ class mesh : public mesh_param {
 		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
 		double gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF);
 		void get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF);
+		void fem_forces(double t_,double* in);
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);

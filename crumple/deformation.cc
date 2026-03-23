@@ -38,7 +38,7 @@ void mesh::Sdq_Sdr(double &Sdq,double &Sdr,int nx,int ny,double sed) {
 		if(inside(row,col,nt,ny,R+1)) {
 			double *right=pts+3*(i+1), *left=pts+3*(i-1), 
 					*upl=pts+3*(i+nt), *upr=pts+3*(i+nt+1),
-					*downl=pts+3*(i-nnt), *downr=pts+3*(i-nnt-1);
+					*downl=pts+3*(i-nnt), *downr=pts+3*(i-nnt+1);
 			// Gradient discretizations
 			double A=5*(right[2]-left[2])/6, B=downl[2]-upr[2];
 			double Dx=(A+(B+upl[2]-downr[2])/3)/sed;
