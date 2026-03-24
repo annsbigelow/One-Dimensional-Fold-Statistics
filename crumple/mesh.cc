@@ -139,9 +139,9 @@ void mesh::setup_springs() {
 					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
 			// Reference mapping
-			double adetF=std::abs((x2-x1)*(y3-y1)-(x3-x1)*(y2-y1));
-			double mass=adetF*a;
-			if (adetF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
+			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+			double mass=detF*a;
+			if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
 			// Loop through nodes and vector components of nodes to assemble M
 			for (int i=0;i<3;i++)
 			for (int k=0;k<3;k++) M[3*v[i]+k]+=mass;
@@ -204,6 +204,17 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double s
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
+
+	// Push in one direction
+	/*
+	if (t_==0.) {
+		printf("t0 hit\n");
+		for (i=0;i<n;i++) {
+			double x=in[3*i],y=in[3*i+1];
+			in[3*n+3*i]=.2*std::exp(-.2*(x*x+y*y));
+		}
+	}
+	*/
 	
     // This line initializes an air-resistance-type drag on the nodes. It
     // should work out that the (acceleration) = - (const.)*(velocity).
@@ -318,7 +329,7 @@ void mesh::fem_forces(double t_,double *in) {
 			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
 			double detF=F[0]*F[3]-F[1]*F[2];
 			if (detF < 1e-12) { //DIAGNOSTIC 
-				fprintf(stderr,"Error: detF is small\n");
+				fprintf(stderr,"Error: detF is small or negative. A triangle's vertices may be stored clockwise.\n");
 				break;
 			}
 			for (int i=0;i<3;i++) // Loop through triangle vertices
@@ -327,12 +338,7 @@ void mesh::fem_forces(double t_,double *in) {
 				double *qT[3]={in+3*v[0], in+3*v[1], in+3*v[2]};
 				get_hatP(hatP_k,k,qT,dPdX,F,detF);
 				double Ak=hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1);
-				int tmp=(detF>0?1:-1);
-				P[3*v[i]+k]+=tmp*Ak/2;
-				//if (P[3*v[i]+k]>1e4) {// DIAGNOSTIC
-					//fprintf(stderr,"Error: P[node %d, component %d] is large.\n",v[i],k);
-					//break;
-				//}
+				P[3*v[i]+k]-=detF*Ak/2;
 			}
             top+=2;
         }
@@ -372,10 +378,7 @@ double mesh::gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF
 	multiplied by the gradient of a basis function. */
 double mesh::FdPI(double F[4],double detF,int dPdX[6],int i,int m) {
 	if (m==0) return ((double)dPdX[i]*F[3] - (double)dPdX[3+i]*F[2])/detF;
-	else if (m==1) return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
-	else {
-		fprintf(stderr, "Inputted index m in FdPI function is out of bounds.\n"); return 1;
-	}
+	else (m==1) return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
 }
 
 /** Computes the energy.
