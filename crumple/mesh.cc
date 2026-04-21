@@ -223,6 +223,7 @@ void mesh::compress(double *M) {
 	}
 	// Convert triplets list to SparseMatrix
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
+	printf("Sparse matrix finished compressing.\n");
 
 	// DIAGNOSTIC
 	/*for (int i=0;i<M_sp.outerSize();++i)
@@ -233,6 +234,7 @@ void mesh::compress(double *M) {
 	solver.analyzePattern(M_sp);
 	solver.factorize(M_sp);
 	if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+	printf("Finished sparse matrix factorization.\n");
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -306,18 +308,12 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		arr_zeros(P,3*n);
 		fem_forces(t_,in);
 
-		Eigen::VectorXd drag_f(3*n), drag_acc(3*n), fem_f(3*n), fem_acc(3*n);
-		std::memcpy(drag_f.data(),in+3*n,3*n*sizeof(double));
-		std::memcpy(fem_f.data(),P,3*n*sizeof(double));
-		
-		// Drag matrix solve
-		drag_acc=solver.solve(drag_f);
-		if (solver.info()!=Eigen::Success) printf("Drag matrix solving failed\n");
-
-		// FEM forces matrix solve
-		fem_acc = solver.solve(fem_f);
-		if (solver.info()!=Eigen::Success) printf("FEM matrix solving failed\n");
-		for(int i=0;i<3*n;i++) acc[i] = -drag*drag_acc[i]+fem_acc[i];
+		Eigen::VectorXd f_sum(3*n), av(3*n);
+		double *vp=in+3*n;
+		for (int i=0;i<3*n;i++) f_sum[i] = P[i]-drag*vp[i];
+		av=solver.solve(f_sum);
+		if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
+		std::memcpy(acc,av.data(),3*n*sizeof(double));
 	}
 	
     // Assemble the velocities in the first part of the out array. In addition,

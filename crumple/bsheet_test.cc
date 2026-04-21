@@ -7,8 +7,8 @@
 int main() {
 
     // Create mesh and initialize acceleration
-    mesh_param par(0.05,0.,0.001,false,false);
-    mesh_rk4 mp(par,"sh48_3x3.bin");
+    mesh_param par(0.05,0.01,0.001,false,false);
+    mesh_rk4 mp(par,"sh48_99x99.bin");
 
     // Centralize and scale the mesh
     double wx,wy,wz;
@@ -50,7 +50,7 @@ int main() {
 
     // Carry out the simulation, reporting the time to compute the timesteps
     // between each output frame
-    //mp.solve_adaptive(50,1e-4,1e-4,false,200); // this is equivalent to running section below:
+    mp.solve_adaptive(50,1e-4,1e-4,false,100); // this is equivalent to running section below:
 
     /*
     mp.output_positions(0);
