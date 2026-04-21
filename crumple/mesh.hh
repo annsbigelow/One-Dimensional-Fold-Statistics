@@ -14,6 +14,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_multimin.h>
+#include <Eigen/SparseCholesky>
 
 double mesh_f(const gsl_vector *v,void *params);
 void mesh_df(const gsl_vector *v,void *params,gsl_vector *df);
@@ -79,8 +80,14 @@ class mesh : public mesh_param {
         int **to;
         /** Memory for the triangular elements of the mesh. */
         int *tom;
-		/** FEM Mass matrix */
-		double *M;
+		/** FEM bool: whether to use mass lumping */
+		bool lump;
+		/** FEM Sparse mass matrix */
+		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
+		/** FEM Mass matrix solver */
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
+		/** FEM Mass matrix, lumped via row-sum */
+		double *M_lump;
 		/** FEM Forcing vector */
 		double *P;
         mesh(mesh_param &mp,const char* filename);
@@ -110,6 +117,7 @@ class mesh : public mesh_param {
 		bool inside(int i,int j,int nt,int ny,int sub);
 		/** FEM Helper Functions */
 		void print_pts(double* pt_array);
+		void compress(double* M);
 		void arr_zeros(double* A, int size);
 		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
 		double gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF);

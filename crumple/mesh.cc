@@ -3,6 +3,7 @@
 #include "mesh.hh"
 #include "vec3.hh"
 
+#include <Eigen/SparseCholesky>
 #include <gsl/gsl_randist.h>
 
 /** The constructor reads in a mesh from a file, and sets up the vertices and
@@ -59,7 +60,7 @@ mesh::~mesh() {
 	}
 
 	// FEM terms
-	delete[] M; delete[] P;
+	delete[] M_lump; delete[] P;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -125,42 +126,113 @@ void mesh::setup_springs() {
         edp++;
     }
 	
-	// Initialize diagonal mass matrix and force vector in FEM computations
-	M=new double[3*n]; arr_zeros(M,3*n);
+	// Initialize force vector in FEM computations
 	P=new double[3*n];
 	top=tom;
-	double a=rho/6;
-	// Loop through generating indices
-	for(int Ti=0;Ti<n;Ti++) {
-		while(top<to[Ti+1]) {
-			// Get coordinates from ref. domain
-			int v[3]={Ti,*top,top[1]};
-			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
-					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
-					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
-			// Reference mapping
-			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-			double mass=detF*a;
-			if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
-			// Loop through nodes and vector components of nodes to assemble M
-			for (int i=0;i<3;i++)
-			for (int k=0;k<3;k++) M[3*v[i]+k]+=mass;
-			top+=2;
+
+	// WITH MASS LUMPING
+	if (lump) {
+		double a=rho/6;
+		M_lump=new double[3*n]; arr_zeros(M_lump,3*n);
+		// Loop through generating indices
+		for(int Ti=0;Ti<n;Ti++) {
+			while(top<to[Ti+1]) {
+				// Get coordinates from ref. domain
+				int v[3]={Ti,*top,top[1]};
+				double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
+						*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
+						*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
+				// Reference mapping
+				double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+				double mass=detF*a;
+				if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
+				// Loop through nodes and vector components of nodes to assemble M
+				for (int i=0;i<3;i++)
+				for (int k=0;k<3;k++) M_lump[3*v[i]+k]+=mass;
+				top+=2;
+			}
 		}
+		// DIAGNOSTIC: Check whether M_lump is singular, and print elements. 
+		/*printf("Lumped mass matrix:\n");
+		for (int i=0;i<3*n;i++) {
+			if (M_lump[i]<1e-16) fprintf(stderr, "Lumped mass matrix is singular.\n");
+			printf("%g\n",M[i]);
+		}
+		printf("End mass matrix diagnostic.\n");*/
 	}
-	// DIAGNOSTIC: Check whether M is singular, and print elements. 
-	//printf("Mass matrix:\n");
-	for (int i=0;i<3*n;i++) {
-		if (M[i]<1e-16) fprintf(stderr, "Mass matrix is singular.\n");
-		//printf("%g\n",M[i]);
+
+	// W/O MASS LUMPING
+	if (!lump) {
+		double S[9]={2,1,1, 1,2,1, 1,1,2};
+		double *M=new double[9*n*n]; arr_zeros(M,9*n*n);
+		double a=rho/24;
+		for(int Ti=0;Ti<n;Ti++) {
+			while(top<to[Ti+1]) {
+				// Get coordinates from ref. domain
+				int v[3]={Ti,*top,top[1]};
+				double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
+						*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
+						*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
+				// Reference mapping
+				double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+				double mass=detF*a;
+				if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
+				// Loop through nodes and vector components of nodes to assemble M
+				for (int i=0;i<3;i++)
+				for (int j=0;j<3;j++)
+				for (int k=0;k<3;k++) { 
+					int row=3*v[i]+k, col=3*v[j]+k;
+					M[3*n*row+col]+=mass*S[3*i+j];
+				}
+				top+=2;
+			}
+		}
+		// TODO: mass matrix diagnostic: singular?
+		// Check if M is SPD to use LLT
+		/*printf("mass matrix:\n");
+		for (int i=0;i<3*n;i++) {
+			for (int j=0;j<3*n;j++) {
+				if (M[3*n*i+j]!=M[3*n*j+i]) printf("M is not symmetric\n");
+				printf("%g ",M[3*n*i+j]);
+			}
+			printf("\n");
+		}
+		printf("End mass matrix diagnostic.\n");*/
+		compress(M);
+		delete[] M;
 	}
-	//printf("End mass matrix diagnostic.\n");
 	
     //if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
 	//}
+}
+/** Converts a sparse matrix M to compressed-sparse-row format
+	using the Eigen API. */
+void mesh::compress(double *M) {
+	// Build a list of triplets
+	M_sp.resize(3*n,3*n);
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	// Get all nonzero entries
+	for (int i=0;i<3*n;i++)
+	for (int j=0;j<3*n;j++) {
+		double nz=M[3*n*i+j];
+		if (std::abs(nz)>1e-14) triplets.push_back(Eigen::Triplet<double>(i,j,nz));
+	}
+	// Convert triplets list to SparseMatrix
+	M_sp.setFromTriplets(triplets.begin(),triplets.end());
+
+	// DIAGNOSTIC
+	/*for (int i=0;i<M_sp.outerSize();++i)
+	for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
+			printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
+
+	// Factorize sparse matrix using LLT Cholesky factorization
+	solver.analyzePattern(M_sp);
+	solver.factorize(M_sp);
+	if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -215,22 +287,39 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		}
 	}
 	*/
+
+	if (lump) {
+		// Air-resistance-type drag
+		// (acceleration) = - (const.)*(velocity)
+		for(double *ap=acc,*vp=in+3*n,*Mp=M_lump;ap<acc+3*n;) 
+			*(ap++)=-*(vp++)*drag / *(Mp++);
+		// Add forces coming from finite-element (FEM) computations
+		arr_zeros(P,3*n);
+		fem_forces(t_,in);
+
+		// XXX - we can ignore this for now
+		// contact_forces(in,out);
+		for(double *ap=acc,*Fp=P,*Mp=M_lump;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
+	}
+	else {
+		// Add forces coming from finite-element (FEM) computations
+		arr_zeros(P,3*n);
+		fem_forces(t_,in);
+
+		Eigen::VectorXd drag_f(3*n), drag_acc(3*n), fem_f(3*n), fem_acc(3*n);
+		std::memcpy(drag_f.data(),in+3*n,3*n*sizeof(double));
+		std::memcpy(fem_f.data(),P,3*n*sizeof(double));
+		
+		// Drag matrix solve
+		drag_acc=solver.solve(drag_f);
+		if (solver.info()!=Eigen::Success) printf("Drag matrix solving failed\n");
+
+		// FEM forces matrix solve
+		fem_acc = solver.solve(fem_f);
+		if (solver.info()!=Eigen::Success) printf("FEM matrix solving failed\n");
+		for(int i=0;i<3*n;i++) acc[i] = -drag*drag_acc[i]+fem_acc[i];
+	}
 	
-    // This line initializes an air-resistance-type drag on the nodes. It
-    // should work out that the (acceleration) = - (const.)*(velocity).
-    //for(double *ap=acc,*vp=in+3*n;ap<acc+3*n;) *(ap++)=-*(vp++)*drag;
-
-	for(double *ap=acc,*vp=in+3*n,*Mp=M;ap<acc+3*n;) *(ap++)=-*(vp++)*drag / *(Mp++);
-
-    // Add forces coming from finite-element (FEM) computations
-	arr_zeros(P,3*n);
-    fem_forces(t_,in);
-
-    // XXX - we can ignore this for now
-    // contact_forces(in,out);
-
-	for(double *ap=acc,*Fp=P,*Mp=M;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
-
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
@@ -378,7 +467,7 @@ double mesh::gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF
 	multiplied by the gradient of a basis function. */
 double mesh::FdPI(double F[4],double detF,int dPdX[6],int i,int m) {
 	if (m==0) return ((double)dPdX[i]*F[3] - (double)dPdX[3+i]*F[2])/detF;
-	else (m==1) return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
+	else return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
 }
 
 /** Computes the energy.
