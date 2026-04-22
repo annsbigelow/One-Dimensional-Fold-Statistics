@@ -7,8 +7,8 @@
 int main() {
 
     // Create mesh and initialize acceleration
-    mesh_param par(0.05,0.01,0.001,false,false);
-    mesh_rk4 mp(par,"sh48_99x99.bin");
+    mesh_param par(0.05,0.03,0.001,false,false);
+    mesh_rk4 mp(par,"sh48_101x101.bin");
 
     // Centralize and scale the mesh
     double wx,wy,wz;
@@ -16,7 +16,7 @@ int main() {
 
     /* Set up springs. Assign lengths manually, since initializing out of
     equilibrium configuration. */
-	mp.lump=false;
+	mp.lump=true;
     mp.setup_springs();
 
     // XXX - Diagnostic routine to see triangles
@@ -27,16 +27,16 @@ int main() {
     //for(double *p=mp.reg;p<mp.reg+mp.ns;p++) *p=1.;
     //for(double *p=mp.ref;p<mp.ref+mp.nh;p++) *p=2./sqrt(3);
 	
-    // Perturb in-plane
+    // Stretch perturbation in-plane
 	double eps=.4;
-    /*for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3) {
+    for(double *p=mp.pts,*pe=p+3*mp.n;p<pe;p+=3) {
 		p[0]=(1+eps)*p[0]; p[1]=(1+eps)*p[1];
 	} 
-	*/
+	
 	// Pure shear perturbation
-	for (double *p=mp.pts, *pe=p+3*mp.n;p<pe;p+=3) {
+	/*for (double *p=mp.pts, *pe=p+3*mp.n;p<pe;p+=3) {
 		p[0]=(1-eps)*p[0]; p[1]=(1+eps)*p[1];
-	}
+	}*/
 	
 	
     // Add centering potential
@@ -50,7 +50,7 @@ int main() {
 
     // Carry out the simulation, reporting the time to compute the timesteps
     // between each output frame
-    mp.solve_adaptive(50,1e-4,1e-4,false,100); // this is equivalent to running section below:
+    mp.solve_adaptive(50,1e-4,1e-4,false,75); // this is equivalent to running section below:
 
     /*
     mp.output_positions(0);

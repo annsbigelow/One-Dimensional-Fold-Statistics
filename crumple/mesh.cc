@@ -163,8 +163,14 @@ void mesh::setup_springs() {
 
 	// W/O MASS LUMPING
 	if (!lump) {
-		double S[9]={2,1,1, 1,2,1, 1,1,2};
-		double *M=new double[9*n*n]; arr_zeros(M,9*n*n);
+		// Build a list of triplets to store mass matrix in compressed form
+		M_sp.resize(3*n,3*n);
+		typedef Eigen::Triplet<double> T;
+		std::vector<T> triplets;
+		// Get (estimated) memory up front for performance
+		triplets.reserve(18*n);
+
+		int S[9]={2,1,1, 1,2,1, 1,1,2};
 		double a=rho/24;
 		for(int Ti=0;Ti<n;Ti++) {
 			while(top<to[Ti+1]) {
@@ -182,24 +188,27 @@ void mesh::setup_springs() {
 				for (int j=0;j<3;j++)
 				for (int k=0;k<3;k++) { 
 					int row=3*v[i]+k, col=3*v[j]+k;
-					M[3*n*row+col]+=mass*S[3*i+j];
+					triplets.push_back(Eigen::Triplet<double>(row,col,mass*S[3*i+j]));
 				}
 				top+=2;
 			}
 		}
-		// TODO: mass matrix diagnostic: singular?
-		// Check if M is SPD to use LLT
-		/*printf("mass matrix:\n");
-		for (int i=0;i<3*n;i++) {
-			for (int j=0;j<3*n;j++) {
-				if (M[3*n*i+j]!=M[3*n*j+i]) printf("M is not symmetric\n");
-				printf("%g ",M[3*n*i+j]);
-			}
-			printf("\n");
-		}
-		printf("End mass matrix diagnostic.\n");*/
-		compress(M);
-		delete[] M;
+		
+		// Convert triplets list to SparseMatrix.
+		// Contributions in same row,col are summed automatically.
+		M_sp.setFromTriplets(triplets.begin(),triplets.end());
+		printf("Sparse mass matrix assembled\n");
+
+		// DIAGNOSTIC: look at nonzero entries of mass matrix
+		/*for (int i=0;i<M_sp.outerSize();++i)
+		for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
+				printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
+
+		// Factorize sparse matrix using LLT Cholesky factorization
+		solver.analyzePattern(M_sp);
+		solver.factorize(M_sp);
+		if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+		printf("Finished sparse matrix factorization.\n");
 	}
 	
     //if(shrink) {
@@ -207,34 +216,6 @@ void mesh::setup_springs() {
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
 	//}
-}
-/** Converts a sparse matrix M to compressed-sparse-row format
-	using the Eigen API. */
-void mesh::compress(double *M) {
-	// Build a list of triplets
-	M_sp.resize(3*n,3*n);
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	// Get all nonzero entries
-	for (int i=0;i<3*n;i++)
-	for (int j=0;j<3*n;j++) {
-		double nz=M[3*n*i+j];
-		if (std::abs(nz)>1e-14) triplets.push_back(Eigen::Triplet<double>(i,j,nz));
-	}
-	// Convert triplets list to SparseMatrix
-	M_sp.setFromTriplets(triplets.begin(),triplets.end());
-	printf("Sparse matrix finished compressing.\n");
-
-	// DIAGNOSTIC
-	/*for (int i=0;i<M_sp.outerSize();++i)
-	for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
-			printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
-
-	// Factorize sparse matrix using LLT Cholesky factorization
-	solver.analyzePattern(M_sp);
-	solver.factorize(M_sp);
-	if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
-	printf("Finished sparse matrix factorization.\n");
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -278,36 +259,21 @@ void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double s
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+3*n;
     int i;
-
-	// Push in one direction
-	/*
-	if (t_==0.) {
-		printf("t0 hit\n");
-		for (i=0;i<n;i++) {
-			double x=in[3*i],y=in[3*i+1];
-			in[3*n+3*i]=.2*std::exp(-.2*(x*x+y*y));
-		}
-	}
-	*/
+	// Add forces coming from finite-element (FEM) computations
+	arr_zeros(P,3*n);
+	fem_forces(t_,in);
 
 	if (lump) {
 		// Air-resistance-type drag
 		// (acceleration) = - (const.)*(velocity)
 		for(double *ap=acc,*vp=in+3*n,*Mp=M_lump;ap<acc+3*n;) 
 			*(ap++)=-*(vp++)*drag / *(Mp++);
-		// Add forces coming from finite-element (FEM) computations
-		arr_zeros(P,3*n);
-		fem_forces(t_,in);
-
+	
 		// XXX - we can ignore this for now
 		// contact_forces(in,out);
 		for(double *ap=acc,*Fp=P,*Mp=M_lump;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
 	}
 	else {
-		// Add forces coming from finite-element (FEM) computations
-		arr_zeros(P,3*n);
-		fem_forces(t_,in);
-
 		Eigen::VectorXd f_sum(3*n), av(3*n);
 		double *vp=in+3*n;
 		for (int i=0;i<3*n;i++) f_sum[i] = P[i]-drag*vp[i];

@@ -117,7 +117,6 @@ class mesh : public mesh_param {
 		bool inside(int i,int j,int nt,int ny,int sub);
 		/** FEM Helper Functions */
 		void print_pts(double* pt_array);
-		void compress(double* M);
 		void arr_zeros(double* A, int size);
 		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
 		double gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF);
