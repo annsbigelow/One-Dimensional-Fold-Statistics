@@ -383,12 +383,16 @@ void mesh::fem_forces(double t_,double *in) {
 				fprintf(stderr,"Error: detF is small or negative. A triangle's vertices may be stored clockwise.\n");
 				break;
 			}
+
+			// Build Pk (independent of psi_i)
+			double Pk[3][2];
+			double *qT[3]={in+3*v[0], in+3*v[1], in+3*v[2]};
+			for (int k=0;k<3;k++) get_hatP(Pk[k],k,qT,dPdX,F,detF);
+
+			// Assemble fem force vector
 			for (int i=0;i<3;i++) // Loop through triangle vertices
 			for (int k=0;k<3;k++) { // Loop through vector components
-				double hatP_k[2];
-				double *qT[3]={in+3*v[0], in+3*v[1], in+3*v[2]};
-				get_hatP(hatP_k,k,qT,dPdX,F,detF);
-				double Ak=hatP_k[0]*FdPI(F,detF,dPdX,i,0) + hatP_k[1]*FdPI(F,detF,dPdX,i,1);
+				double Ak=Pk[k][0]*FdPI(F,detF,dPdX,i,0) + Pk[k][1]*FdPI(F,detF,dPdX,i,1);
 				P[3*v[i]+k]-=detF*Ak/2;
 			}
             top+=2;
@@ -402,34 +406,40 @@ void mesh::fem_forces(double t_,double *in) {
 *	\param[in] k the row of P to return
 */
 void mesh::get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF) {
-	double C=0.;
-	double D[4]={0.,0.,0.,0.};
-	// Could make this more efficient to reuse gradq values
-	for (int p=0;p<3;p++) {
-		double A=gradq(qT,p,dPdX,0,F,detF), B=gradq(qT,p,dPdX,1,F,detF);
-		C+=A*A+B*B;
-		D[0]+=A*A; D[1]+=A*B;
-		D[2]+=B*A; D[3]+=B*B;
+	hatP_k[0]=0.;
+	hatP_k[1]=0.;
+
+	// grad q 
+	double G[3][2] = {0.};
+	for (int p=0;p<3;p++)
+	for (int m=0;m<2;m++)
+	for (int i=0;i<3;i++) {
+		double *qTi=qT[i]; // 3 components of i-th node
+		G[p][m] += qTi[p]*FdPI(F,detF,dPdX,i,m);
 	}
-	for (int l=0;l<2;l++) hatP_k[l] = gradq(qT,k,dPdX,0,F,detF) * (lambda*(C-2) * (l==0?1:0)/2 + mu_fem*(D[l]-(l==0?1:0))) +
-										gradq(qT,k,dPdX,1,F,detF) * (lambda*(C-2) * (l==1?1:0)/2 + mu_fem*(D[l+2]-(l==1?1:0)));
+	// trace(G^T G)
+	double C=0.;
+	for (int p=0;p<3;p++)
+	for (int m=0;m<2;m++) C+=G[p][m]*G[p][m];
+	// G^T G
+	double D[2][2] = {0};
+	for (int m=0;m<2;m++)
+	for (int l=0;l<2;l++)
+	for (int p=0;p<3;p++) D[m][l]+=G[p][m]*G[p][l];
+
+	for (int l=0;l<2;l++)
+	for (int m=0;m<2;m++) hatP_k[l] += G[k][m]*( lambda*.5*(C - 2.)*delta(m,l) + mu_fem*(D[m][l]-delta(m,l)) );
 }
 
-/** Computes the k-th component of grad q on a particular element. */
-double mesh::gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF) {
-	double result=0.;
-	for (int i=0;i<3;i++){ // Loop through triangle vertices
-		double *qTi=qT[i];
-		result+=qTi[k]*FdPI(F,detF,dPdX,i,m);
-	}
-	return result;
+int mesh::delta(int m, int l) {
+	return (l==m?1:0);
 }
 
 /** A component of the inverse-transpose of the reference mapping matrix
 	multiplied by the gradient of a basis function. */
 double mesh::FdPI(double F[4],double detF,int dPdX[6],int i,int m) {
-	if (m==0) return ((double)dPdX[i]*F[3] - (double)dPdX[3+i]*F[2])/detF;
-	else return ((double)dPdX[3+i]*F[0] - (double)dPdX[i]*F[1])/detF;
+	if (m==0) return (dPdX[i]*F[3] - dPdX[3+i]*F[2])/detF;
+	else return (dPdX[3+i]*F[0] - dPdX[i]*F[1])/detF;
 }
 
 /** Computes the energy.

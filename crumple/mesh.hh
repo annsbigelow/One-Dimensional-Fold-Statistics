@@ -119,7 +119,7 @@ class mesh : public mesh_param {
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
-		double gradq(double* qT[3],int k,int dPdX[6],int m,double F[4],double detF);
+		int delta(int m,int l);
 		void get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF);
 		void fem_forces(double t_,double* in);
 

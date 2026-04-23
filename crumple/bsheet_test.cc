@@ -16,7 +16,7 @@ int main() {
 
     /* Set up springs. Assign lengths manually, since initializing out of
     equilibrium configuration. */
-	mp.lump=true;
+	mp.lump=false;
     mp.setup_springs();
 
     // XXX - Diagnostic routine to see triangles
@@ -45,12 +45,12 @@ int main() {
     mp.add(&epc);
 	
     // Setup the output directory and allocate memory for integrator.
-    mp.setup_output_dir("brun_d.out");
+    mp.setup_output_dir("brun_101_nolump.out");
     //mp.allocate(6*mp.n); // XXX - Mesh constructor already allocates mem
 
     // Carry out the simulation, reporting the time to compute the timesteps
     // between each output frame
-    mp.solve_adaptive(50,1e-4,1e-4,false,75); // this is equivalent to running section below:
+    mp.solve_adaptive(25,1e-4,1e-4,false,50); // this is equivalent to running section below:
 
     /*
     mp.output_positions(0);
