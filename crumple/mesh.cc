@@ -3,6 +3,7 @@
 #include "mesh.hh"
 #include "vec3.hh"
 
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCholesky>
 #include <gsl/gsl_randist.h>
 
@@ -160,9 +161,8 @@ void mesh::setup_springs() {
 		}
 		printf("End mass matrix diagnostic.\n");*/
 	}
-
 	// W/O MASS LUMPING
-	if (!lump) {
+	else {
 		// Build a list of triplets to store mass matrix in compressed form
 		M_sp.resize(3*n,3*n);
 		typedef Eigen::Triplet<double> T;
@@ -204,11 +204,15 @@ void mesh::setup_springs() {
 		for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
 				printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
 
-		// Factorize sparse matrix using LLT Cholesky factorization
-		solver.analyzePattern(M_sp);
-		solver.factorize(M_sp);
-		if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
-		printf("Finished sparse matrix factorization.\n");
+		// Setup for conjugate gradient solve
+		if (CG) cg_solver.compute(M_sp);
+		else {
+			// Factorize sparse matrix using LLT Cholesky factorization
+			solver.analyzePattern(M_sp);
+			solver.factorize(M_sp);
+			if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+			printf("Finished sparse matrix factorization.\n");
+		}
 	}
 	
     //if(shrink) {
@@ -277,8 +281,14 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		Eigen::VectorXd f_sum(3*n), av(3*n);
 		double *vp=in+3*n;
 		for (int i=0;i<3*n;i++) f_sum[i] = P[i]-drag*vp[i];
-		av=solver.solve(f_sum);
-		if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
+		if (CG) { // Conjugate Gradient solver
+			av=cg_solver.solve(f_sum);
+			//printf("CG iterations: %ld\nCG estimated error: %f\n", cg_solver.iterations(),cg_solver.error());
+		}
+		else { // Cholesky direct solver
+			av=solver.solve(f_sum);
+			if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
+		}
 		std::memcpy(acc,av.data(),3*n*sizeof(double));
 	}
 	

@@ -14,6 +14,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_multimin.h>
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCholesky>
 
 double mesh_f(const gsl_vector *v,void *params);
@@ -82,9 +83,13 @@ class mesh : public mesh_param {
         int *tom;
 		/** FEM bool: whether to use mass lumping */
 		bool lump;
+		/** FEM bool: whether to use conjugate gradient instead of sparse direct solver */
+		bool CG;
 		/** FEM Sparse mass matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
-		/** FEM Mass matrix solver */
+		/** FEM Conjugate Gradient solver */
+		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower|Eigen::Upper> cg_solver;
+		/** FEM Mass matrix Sparse Cholesky solver */
 		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
 		/** FEM Mass matrix, lumped via row-sum */
 		double *M_lump;
