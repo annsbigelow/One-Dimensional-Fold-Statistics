@@ -204,8 +204,15 @@ void mesh::setup_springs() {
 		for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
 				printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
 
-		// Setup for conjugate gradient solve
-		if (CG) cg_solver.compute(M_sp);
+		if(PCG) { 
+			// Setup CG with incomplete Cholesky preconditioner 
+			// using default tolerance and max iterations
+			pcg_solver.compute(M_sp);
+			if(pcg_solver.info()!=Eigen::Success) printf("Incomplete Cholesky factorization failed\n");
+			printf("Finished Incomplete Cholesky factorization.\n");
+		}
+		// Setup for CG solve (with default Diagonal Preconditioner)
+		else if (CG) cg_solver.compute(M_sp);
 		else {
 			// Factorize sparse matrix using LLT Cholesky factorization
 			solver.analyzePattern(M_sp);
@@ -284,6 +291,10 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		if (CG) { // Conjugate Gradient solver
 			av=cg_solver.solve(f_sum);
 			//printf("CG iterations: %ld\nCG estimated error: %f\n", cg_solver.iterations(),cg_solver.error());
+		}
+		else if (PCG) { // Incomplete Cholesky PCG
+			av=pcg_solver.solve(f_sum);
+			if (pcg_solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
 		}
 		else { // Cholesky direct solver
 			av=solver.solve(f_sum);

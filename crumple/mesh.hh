@@ -85,10 +85,14 @@ class mesh : public mesh_param {
 		bool lump;
 		/** FEM bool: whether to use conjugate gradient instead of sparse direct solver */
 		bool CG;
+		/** FEM bool: whether to use incomplete Cholesky as a CG preconditioner. */
+		bool PCG;
 		/** FEM Sparse mass matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
 		/** FEM Conjugate Gradient solver */
 		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower|Eigen::Upper> cg_solver;
+		/** FEM Preconditioned Conjugate Gradient solver */
+		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>,Eigen::Lower|Eigen::Upper,Eigen::IncompleteCholesky<double> > pcg_solver; 
 		/** FEM Mass matrix Sparse Cholesky solver */
 		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
 		/** FEM Mass matrix, lumped via row-sum */

@@ -7,7 +7,8 @@ int main() {
 	mesh_param par(0.05, 0.03, 0.001, false, false);
 	mesh_rk4 mp(par, "sh48_211x211.bin");
 	mp.lump=false;
-	mp.CG=true;
+	mp.CG=false;
+	mp.PCG=true;
 
 	// Centralize and scale the mesh
 	double wx, wy, wz;
@@ -34,7 +35,7 @@ int main() {
 	}*/
 
 	// Setup the output directory and allocate memory for integrator.
-	mp.setup_output_dir("CGTime.out");
+	mp.setup_output_dir("PCG_Test.odr");
 
 	mp.solve_adaptive(75, 1e-4, 1e-4, false, 100); 
 
