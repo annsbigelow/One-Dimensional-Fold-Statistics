@@ -37,7 +37,7 @@ void mesh::read_positions(FILE *fp) {
     ns=nc>>1;
 
     // Set up the memory for the integration routines
-    pts=new double[2*(18*n+ne)];vel=pts+(18*n+ne);
+    pts=new double[2*(6*n+ne)];vel=pts+(6*n+ne);
 
     // Read in the points and set velocities to zero
     xyz=new double[3*n];
@@ -48,13 +48,13 @@ void mesh::read_positions(FILE *fp) {
  * \param[in] fp a file handle to write to. */
 void mesh::draw_nodes(FILE *fp) {
     for(int i=0;i<n;i++)
-        fprintf(fp,"%g %g %g\n",xyz[3*i],xyz[3*i+1],pts[18*i]);
+        fprintf(fp,"%g %g %g\n",xyz[3*i],xyz[3*i+1],pts[6*i]);
 }
 
 /** Saves the node positions as POV-Ray spheres to a file.
  * \param[in] fp a file handle to write to. */
 void mesh::draw_nodes_pov(FILE *fp) {
-    for(int i=0;i<n;i++) fprintf(fp,"sphere{<%g,%g,%g>,r}\n",xyz[3*i],xyz[3*i+1],pts[18*i]);
+    for(int i=0;i<n;i++) fprintf(fp,"sphere{<%g,%g,%g>,r}\n",xyz[3*i],xyz[3*i+1],pts[6*i]);
 }
 
 /** Draws the mesh of edges to a text file for plotting with Gnuplot. Since
@@ -74,13 +74,13 @@ void mesh::draw_mesh_gnuplot(FILE *fp) {
                 // Mark and print this edge
                 j=edge_mark(i,edp);
                 fprintf(fp,"%g %g %g\n%g %g %g\n",
-                           xyz[3*i],xyz[3*i+1],pts[18*i],
-                           xyz[3*j],xyz[3*j+1],pts[18*j]);
+                           xyz[3*i],xyz[3*i+1],pts[6*i],
+                           xyz[3*j],xyz[3*j+1],pts[6*j]);
 
                 // Follow and print as many unmarked edges as possible
                 while(find_unmarked(j,edp2)) {
                     j=edge_mark(j,edp2);
-                    fprintf(fp,"%g %g %g\n",xyz[3*j],xyz[3*j+1],pts[18*j]);
+                    fprintf(fp,"%g %g %g\n",xyz[3*j],xyz[3*j+1],pts[6*j]);
                 }
                 fputs("\n\n",fp);
             }
@@ -239,14 +239,14 @@ void mesh::mesh_print_dense(int fr,double t_,double *in) {
     printf("# Output frame %d (t=%g)\n",fr,t_);
     sprintf(obuf,"%s/pts.%d",odir,fr);
     FILE *fp=safe_fopen(obuf,"wb");
-    fwrite(in,sizeof(double),18*n+ne,fp);
+    fwrite(in,sizeof(double),6*n+ne,fp);
     fclose(fp);
 }
 
 /** Outputs the mesh vertex positions.
  * \param[in] fp a file handle to write to. */
 void mesh::output_positions(FILE *fp) {
-    fwrite(pts,sizeof(double),18*n+ne,fp);
+    fwrite(pts,sizeof(double),6*n+ne,fp);
 }
 
 /** Outputs the mesh vertex positions into the output directory with a given
@@ -265,7 +265,7 @@ void mesh::output_positions(int l) {
 /** Outputs the mesh vertex velocities.
  * \param[in] fp a file handle to write to. */
 void mesh::output_velocities(FILE *fp) {
-    fwrite(vel,sizeof(double),18*n+ne,fp);
+    fwrite(vel,sizeof(double),6*n+ne,fp);
 }
 
 /** Outputs the mesh vertex velocities into the output directory with a given
