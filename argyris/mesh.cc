@@ -21,9 +21,6 @@ mesh::mesh(mesh_param &mp,const char* filename) : mesh_param(mp),
     read_topology(fp);
     read_positions(fp);
     fclose(fp);
-
-	// Seed the RNG
-	if(shrink) { rng=gsl_rng_alloc(gsl_rng_taus2); gsl_rng_set(rng,22); }
 }
 
 /** The constructor reads in mesh topology and vertex positions from separate
@@ -54,12 +51,13 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
 mesh::~mesh() {
     if(odir!=NULL) delete [] odir;
     if(bsheet_model) { delete [] tom; delete [] to;}
-     delete [] eom; delete [] eo;
+    delete [] eom; delete [] eo;
     delete [] edm;delete [] ed;
     delete [] ncn;
+    delete [] xyz;
     delete [] pts;
 
-	if(shrink){ 
+	if(shrink){
 		delete[] shs; delete[] kappas; delete[] kss;
 		gsl_rng_free(rng);
 	}
@@ -72,13 +70,10 @@ mesh::~mesh() {
  * be fully relaxed. Sets up the boundaries of the subsheet, if applicable.
  */
 void mesh::setup_springs() {
+
 	// Copy initial positions to define the reference configuration
 	sh_pts = new double[3*n];
 	std::memcpy(sh_pts,pts,3*n*sizeof(double));
-
-    // For this case, the number of springs will just be half the number of
-    // connections
-    ns=nc>>1;
 
     // Scan the triangle table, and store an edge (i,j) if i<j to ensure that
     // only one copy of each is kept
@@ -106,7 +101,7 @@ void mesh::setup_springs() {
 
     // Compute the triangle table
     to=new int*[n+1];
-    tom=new int[2*ntri];
+    tom=new int[5*ntri];
     int *top=tom;edp=edm;
     for(int i=0;i<n;i++) {
         to[i]=top;
@@ -116,6 +111,9 @@ void mesh::setup_springs() {
             if(*edp>i&&edp[1]>i) {
                 *(top++)=*edp;
                 *(top++)=edp[1];
+                *(top++)=edge_lookup(i,*edp);
+                *(top++)=edge_lookup(*edp,edp[1]);
+                *(top++)=edge_lookup(edp[1],i);
             }
             edp++;
         }
@@ -126,11 +124,14 @@ void mesh::setup_springs() {
             if(*edp>i && *ed[i]>i) {
                 *(top++)=*edp;
                 *(top++)=*ed[i];
+                *(top++)=edge_lookup(i,*edp);
+                *(top++)=edge_lookup(*edp,*ed[i]);
+                *(top++)=edge_lookup(*ed[i],i);
             }
         }
         edp++;
     }
-	
+
 	// Initialize force vector in FEM computations
 	P=new double[3*n];
 	top=tom;
@@ -154,10 +155,10 @@ void mesh::setup_springs() {
 				// Loop through nodes and vector components of nodes to assemble M
 				for (int i=0;i<3;i++)
 				for (int k=0;k<3;k++) M_lump[3*v[i]+k]+=mass;
-				top+=2;
+				top+=2; //TODO - would become 5
 			}
 		}
-		// DIAGNOSTIC: Check whether M_lump is singular, and print elements. 
+		// DIAGNOSTIC: Check whether M_lump is singular, and print elements.
 		/*printf("Lumped mass matrix:\n");
 		for (int i=0;i<3*n;i++) {
 			if (M_lump[i]<1e-16) fprintf(stderr, "Lumped mass matrix is singular.\n");
@@ -190,14 +191,14 @@ void mesh::setup_springs() {
 				// Loop through nodes and vector components of nodes to assemble M
 				for (int i=0;i<3;i++)
 				for (int j=0;j<3;j++)
-				for (int k=0;k<3;k++) { 
+				for (int k=0;k<3;k++) {
 					int row=3*v[i]+k, col=3*v[j]+k;
 					triplets.push_back(Eigen::Triplet<double>(row,col,mass*S[3*i+j]));
 				}
-				top+=2;
+				top+=2; // TODO - would become 5
 			}
 		}
-		
+
 		// Convert triplets list to SparseMatrix.
 		// Contributions in same row,col are summed automatically.
 		M_sp.setFromTriplets(triplets.begin(),triplets.end());
@@ -208,8 +209,8 @@ void mesh::setup_springs() {
 		for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
 				printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
 
-		if(PCG) { 
-			// Setup CG with incomplete Cholesky preconditioner 
+		if(PCG) {
+			// Setup CG with incomplete Cholesky preconditioner
 			// using default tolerance and max iterations
 			pcg_solver.compute(M_sp);
 			if(pcg_solver.info()!=Eigen::Success) printf("Incomplete Cholesky factorization failed\n");
@@ -225,12 +226,22 @@ void mesh::setup_springs() {
 			printf("Finished sparse matrix factorization.\n");
 		}
 	}
-	
+
     //if(shrink) {
 		set_scale=1.;
 		double h=static_cast<double>(sed);
 		R = static_cast<int>(std::ceil(set_scale / h));
 	//}
+}
+
+int mesh::edge_lookup(int i,int j) {
+    if(j>i) {int k=j;j=i;i=k;}
+    int *eop=eo[i];
+    for(int *eop=eo[i];eop<eo[i+1];eop++) {
+        if(*eop==j) return int(eop-eom);
+    }
+    fputs("Can't find edge index\n",stderr);
+    exit(1);
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -264,7 +275,7 @@ void mesh::print_pts(double *pt_array) {
 void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
 	double ksm,double ksv,int nx,int ny) {
 	shs=new double[n]; kappas=new double[n]; kss=new double[n];
-	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;  
+	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;
 
 	if(rand_sh) gen_spring_params_rec(shs,shm,shv,nx,ny);
 	if(rand_b) gen_spring_params_rec(kappas,bm,bv,nx,ny);
@@ -281,9 +292,9 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	if (lump) {
 		// Air-resistance-type drag
 		// (acceleration) = - (const.)*(velocity)
-		for(double *ap=acc,*vp=in+3*n,*Mp=M_lump;ap<acc+3*n;) 
+		for(double *ap=acc,*vp=in+3*n,*Mp=M_lump;ap<acc+3*n;)
 			*(ap++)=-*(vp++)*drag / *(Mp++);
-	
+
 		// XXX - we can ignore this for now
 		// contact_forces(in,out);
 		for(double *ap=acc,*Fp=P,*Mp=M_lump;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
@@ -306,7 +317,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		}
 		std::memcpy(acc,av.data(),3*n*sizeof(double));
 	}
-	
+
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
@@ -404,7 +415,7 @@ void mesh::fem_forces(double t_,double *in) {
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
 			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
 			double detF=F[0]*F[3]-F[1]*F[2];
-			if (detF < 1e-12) { //DIAGNOSTIC 
+			if (detF < 1e-12) { //DIAGNOSTIC
 				fprintf(stderr,"Error: detF is small or negative. A triangle's vertices may be stored clockwise.\n");
 				break;
 			}
@@ -427,14 +438,14 @@ void mesh::fem_forces(double t_,double *in) {
     //for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
 }
 
-/* Compute a row of the block matrix P_hat used FEM force calculations. 
+/* Compute a row of the block matrix P_hat used FEM force calculations.
 *	\param[in] k the row of P to return
 */
 void mesh::get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF) {
 	hatP_k[0]=0.;
 	hatP_k[1]=0.;
 
-	// grad q 
+	// grad q
 	double G[3][2] = {0.};
 	for (int p=0;p<3;p++)
 	for (int m=0;m<2;m++)
@@ -610,7 +621,7 @@ void mesh::gen_spring_params_rec(double* out,double m,double s,int nx,int ny) {
 	int* seen=new int[n];
 	for (i=0;i<n;i++) seen[i]=-1;
 	int visit=0;
-	int nn=3*R*(R+1)+1,cct,nct,nt; 
+	int nn=3*R*(R+1)+1,cct,nct,nt;
 	int* cpts=new int[nn]; int* npts=new int[nn]; // Current and next layers
 	for (int j=0;j<ny;j++) {
 		nt=nx+(j&1);
@@ -621,7 +632,7 @@ void mesh::gen_spring_params_rec(double* out,double m,double s,int nx,int ny) {
 				// Layer 0: focus node
 				visit++;
 				seen[g]=visit; cpts[cct++]=g;
-				val=weights[0]*in[g];	
+				val=weights[0]*in[g];
 				for (int layer=1;layer<=R;layer++) {
 					nct=0;
 					// Current layer
