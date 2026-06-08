@@ -5,11 +5,12 @@
 #include <cstdlib>
 #include <cmath>
 
-#include "common.hh"
-#include "rk4.hh"
-#include "mesh_param.hh"
-#include "ext_potential.hh"
-#include "p_grid.hh"
+#include "../crumple/common.hh"
+#include "../crumple/rk4.hh"
+#include "../crumple/mesh_param.hh"
+#include "../crumple/ext_potential.hh"
+#include "../crumple/p_grid.hh"
+#include "pre_comps.hh"
 
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_vector.h>
@@ -53,14 +54,10 @@ class mesh : public mesh_param {
 		bool rand_b;
 		/** Whether to use random stretch spring constants or not. */
 		bool rand_st;
-		/** The contracting node positions. */
-		double *sh_pts;
 		/** The depth of the sheet's edges to ignore. */
 		int R;
 		/** The scale of random features on the shrinking sheet. */
 		double set_scale;
-		/** The shrink strengths for each node. */
-		double *shs;
 		/** The bend spring constants for each node. */
 		double *kappas;
 		/** The stretch spring constants for each node. */
@@ -101,6 +98,7 @@ class mesh : public mesh_param {
 		double *M_lump;
 		/** FEM Forcing vector */
 		double *P;
+
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
         virtual ~mesh();
@@ -114,7 +112,7 @@ class mesh : public mesh_param {
         void read_positions(FILE *fp);
         void setup_springs();
         void reset_relaxed();
-        void contact_forces(double *in,double *out);
+        //void contact_forces(double *in,double *out);
         void print_triangle_table();
         double energy(double t_,double *in);
         int bandwidth();

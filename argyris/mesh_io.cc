@@ -37,7 +37,7 @@ void mesh::read_positions(FILE *fp) {
     ns=nc>>1;
 
     // Set up the memory for the integration routines
-    pts=new double[2*(6*n+ne)];vel=pts+(6*n+ne);
+    pts=new double[2*(6*n+ns)];vel=pts+(6*n+ns);
 
     // Read in the points and set velocities to zero
     xyz=new double[3*n];
@@ -239,14 +239,14 @@ void mesh::mesh_print_dense(int fr,double t_,double *in) {
     printf("# Output frame %d (t=%g)\n",fr,t_);
     sprintf(obuf,"%s/pts.%d",odir,fr);
     FILE *fp=safe_fopen(obuf,"wb");
-    fwrite(in,sizeof(double),6*n+ne,fp);
+    fwrite(in,sizeof(double),6*n+ns,fp);
     fclose(fp);
 }
 
 /** Outputs the mesh vertex positions.
  * \param[in] fp a file handle to write to. */
 void mesh::output_positions(FILE *fp) {
-    fwrite(pts,sizeof(double),6*n+ne,fp);
+    fwrite(pts,sizeof(double),6*n+ns,fp);
 }
 
 /** Outputs the mesh vertex positions into the output directory with a given
@@ -265,7 +265,7 @@ void mesh::output_positions(int l) {
 /** Outputs the mesh vertex velocities.
  * \param[in] fp a file handle to write to. */
 void mesh::output_velocities(FILE *fp) {
-    fwrite(vel,sizeof(double),6*n+ne,fp);
+    fwrite(vel,sizeof(double),6*n+ns,fp);
 }
 
 /** Outputs the mesh vertex velocities into the output directory with a given

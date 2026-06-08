@@ -1,7 +1,7 @@
 #include <cstring>
 
 #include "mesh.hh"
-#include "vec3.hh"
+#include "../crumple/vec3.hh"
 
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCholesky>
@@ -58,7 +58,7 @@ mesh::~mesh() {
     delete [] pts;
 
 	if(shrink){
-		delete[] shs; delete[] kappas; delete[] kss;
+		delete[] kappas; delete[] kss;
 		gsl_rng_free(rng);
 	}
 
@@ -70,11 +70,6 @@ mesh::~mesh() {
  * be fully relaxed. Sets up the boundaries of the subsheet, if applicable.
  */
 void mesh::setup_springs() {
-
-	// Copy initial positions to define the reference configuration
-	sh_pts = new double[3*n];
-	std::memcpy(sh_pts,pts,3*n*sizeof(double));
-
     // Scan the triangle table, and store an edge (i,j) if i<j to ensure that
     // only one copy of each is kept
     eo=new int*[n+1];
@@ -137,7 +132,7 @@ void mesh::setup_springs() {
 	top=tom;
 
 	// WITH MASS LUMPING
-	if (lump) {
+	/*if (lump) {
 		double a=rho/6;
 		M_lump=new double[3*n]; arr_zeros(M_lump,3*n);
 		// Loop through generating indices
@@ -158,13 +153,6 @@ void mesh::setup_springs() {
 				top+=2; //TODO - would become 5
 			}
 		}
-		// DIAGNOSTIC: Check whether M_lump is singular, and print elements.
-		/*printf("Lumped mass matrix:\n");
-		for (int i=0;i<3*n;i++) {
-			if (M_lump[i]<1e-16) fprintf(stderr, "Lumped mass matrix is singular.\n");
-			printf("%g\n",M[i]);
-		}
-		printf("End mass matrix diagnostic.\n");*/
 	}
 	// W/O MASS LUMPING
 	else {
@@ -203,40 +191,18 @@ void mesh::setup_springs() {
 		// Contributions in same row,col are summed automatically.
 		M_sp.setFromTriplets(triplets.begin(),triplets.end());
 		printf("Sparse mass matrix assembled\n");
-
-		// DIAGNOSTIC: look at nonzero entries of mass matrix
-		/*for (int i=0;i<M_sp.outerSize();++i)
-		for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(M_sp, i);it;++it)
-				printf("(%ld,%ld)=%g\n",it.row(),it.col(),it.value());*/
-
-		if(PCG) {
-			// Setup CG with incomplete Cholesky preconditioner
-			// using default tolerance and max iterations
-			pcg_solver.compute(M_sp);
-			if(pcg_solver.info()!=Eigen::Success) printf("Incomplete Cholesky factorization failed\n");
-			printf("Finished Incomplete Cholesky factorization.\n");
-		}
-		// Setup for CG solve (with default Diagonal Preconditioner)
-		else if (CG) cg_solver.compute(M_sp);
-		else {
-			// Factorize sparse matrix using LLT Cholesky factorization
-			solver.analyzePattern(M_sp);
-			solver.factorize(M_sp);
-			if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
-			printf("Finished sparse matrix factorization.\n");
-		}
-	}
-
-    //if(shrink) {
-		set_scale=1.;
-		double h=static_cast<double>(sed);
-		R = static_cast<int>(std::ceil(set_scale / h));
-	//}
+		*/
+		/*
+		// Factorize sparse matrix using LLT Cholesky factorization
+		solver.analyzePattern(M_sp);
+		solver.factorize(M_sp);
+		if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+		printf("Finished sparse matrix factorization.\n");
+	}*/
 }
 
 int mesh::edge_lookup(int i,int j) {
     if(j>i) {int k=j;j=i;i=k;}
-    int *eop=eo[i];
     for(int *eop=eo[i];eop<eo[i+1];eop++) {
         if(*eop==j) return int(eop-eom);
     }
@@ -265,21 +231,6 @@ void mesh::print_pts(double *pt_array) {
 		printf(" ");
 	}
 	printf("\n");
-}
-
-/** Copies initial node positions in the presence of a shrinking substrate and applies
-*	a random perturbation to the rate of each contracting node.
-*	\param[in] shflag, bendflag, stflag: Flags setting the choices to use random spring constants.
-*	param[in] shm,shv,...,ksv: Mean and variance for each set of springs.
-*/
-void mesh::init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
-	double ksm,double ksv,int nx,int ny) {
-	shs=new double[n]; kappas=new double[n]; kss=new double[n];
-	rand_sh=shflag;rand_b=bendflag;rand_st=stflag;
-
-	if(rand_sh) gen_spring_params_rec(shs,shm,shv,nx,ny);
-	if(rand_b) gen_spring_params_rec(kappas,bm,bv,nx,ny);
-	if(rand_st) gen_spring_params_rec(kss,ksm,ksv,nx,ny);
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -341,7 +292,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 /** Adds in the contact forces between nodes in the mesh.
  * \param[in] in the mesh point positions.
  * \param[in] out the mesh point accelerations (cumulative). */
-void mesh::contact_forces(double *in,double *out) {
+/*void mesh::contact_forces(double *in,double *out) {
     double *acc=out+3*n,K=100;
     const double diamsq=diam*diam,
                  screen=6,screensq=screen*screen;
@@ -397,19 +348,19 @@ void mesh::contact_forces(double *in,double *out) {
             }
         }
     }
-}
+}*/
 
 /** Computes the finite-elements forces from sheet mechanics.
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions. */
 void mesh::fem_forces(double t_,double *in) {
 	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
-	int dPdX[6]={-1,1,0, -1,0,1};
+	//int dPdX[6]={-1,1,0, -1,0,1};
 
     int *top=tom;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {
-			int v[3]={Ti,*top,top[1]};
+			/*int v[3]={Ti,*top,top[1]};
 			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
 					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
 					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
@@ -430,7 +381,7 @@ void mesh::fem_forces(double t_,double *in) {
 			for (int k=0;k<3;k++) { // Loop through vector components
 				double Ak=Pk[k][0]*FdPI(F,detF,dPdX,i,0) + Pk[k][1]*FdPI(F,detF,dPdX,i,1);
 				P[3*v[i]+k]-=detF*Ak/2;
-			}
+			}*/
             top+=2;
         }
     }
@@ -513,24 +464,6 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
     wx*=fac;wy*=fac;wz*=fac;
 }
 
-/** Calculates the acceleration due to the contraction of nodes
- * towards the centroid. */
-void mesh::shrink_force(double fac,double *in,double *acc,int i) {
-	// Define "springs" between shrinking points and current nodes
-	double *is=sh_pts+3*i, *ip=in+3*i,
-			dx=*is*fac-*ip, dy=is[1]*fac-ip[1], dz=is[2]*fac-ip[2],
-			*ai=acc+3*i;
-
-	// Add the force contributions to the vertex
-	if(rand_sh) {
-		dx*=shs[i]; dy*=shs[i]; dz*=shs[i];
-	}
-	else {
-		dx*=ks;dy*=ks;dz*=ks;
-	}
-	*ai+=dx;ai[1]+=dy;ai[2]+=dz;
-}
-
 void mesh::damp_force(double *in,double *acc,int i,int k) {
     double *ii=in+3*(i+n),*ik=in+3*(k+n),*ai=acc+3*i,*ak=acc+3*k,
            dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2];
@@ -569,103 +502,4 @@ void mesh::add(ext_potential *ep) {
         exit(1);
     }
     ex_pot[n_ep++]=ep;
-}
-
-/** Checks whether a node lies within a given boundary.
-*	\param[in] row,col the location of the node
-*	\param[in] nt,ny the x- and y-dimensions of the current row
-*	\param[in] sub the layers of edge nodes to ignore
-*/
-bool mesh::inside(int row,int col,int nt,int ny,int sub) {
-	if (col>sub-1&&col<nt-sub&&row>sub-1&&row<ny-sub) return true;
-	else return false;
-}
-
-/** Fills an array with n log-normally distributed values after using a Gaussian filter.
-*	Valid for a mesh with regular hexagonal topology.
-*	\param[in] m the mean of the log-normal distribution.
-*	\param[in] s the standard deviation of the log-normal distribution.
-*	\param[in] nx,ny the dimensions of the mesh.
-*	\return the array of random, filtered values.
-*/
-void mesh::gen_spring_params_rec(double* out,double m,double s,int nx,int ny) {
-	double mm=m*m,ss=s*s;
-	double mu=0.,sig=0.,R2=static_cast<double>(R*R),val;
-	int i,g=0;
-
-	// Calculate filter weights. Each weight is applied to an entire support layer.
-	double* weights=new double[R+1];
-	double norm=0.,sum=0.,sum2=0.,A,B;
-	// Loop through neighbor layers, starting with closest hexagonal layer
-	for (i=0;i<=R;i++) {
-		weights[i]=exp(-(static_cast<double>(i)*i)/(2*R2));
-		norm+=weights[i];
-	}
-	// Normalize the weights and sum the squares
-	for (i=0;i<=R;i++) {
-		weights[i]/=norm;
-		sum+=i*weights[i];
-		sum2+=i*weights[i]*weights[i];
-	}
-	A=weights[0]+(6*sum);
-	B=(weights[0]*weights[0])+(6*sum2);
-	mu=log(mm/sqrt(ss+mm))/A;
-	sig=sqrt(log(ss/mm+1)/B);
-
-	// Generate grid of normal values
-	double *in=new double[n];
-	for (i=0;i<n;i++) in[i]=mu+gsl_ran_gaussian_ziggurat(rng,sig);
-
-	// Apply the Gaussian filter to interior nodes
-	std::memcpy(out,in,n*sizeof(double));
-	int* seen=new int[n];
-	for (i=0;i<n;i++) seen[i]=-1;
-	int visit=0;
-	int nn=3*R*(R+1)+1,cct,nct,nt;
-	int* cpts=new int[nn]; int* npts=new int[nn]; // Current and next layers
-	for (int j=0;j<ny;j++) {
-		nt=nx+(j&1);
-		for (i=0;i<nt;i++,g++) {
-			if(inside(i,j,nt,ny,R)){
-				// Loop through layers of neighbors
-				cct=0; nct=0;
-				// Layer 0: focus node
-				visit++;
-				seen[g]=visit; cpts[cct++]=g;
-				val=weights[0]*in[g];
-				for (int layer=1;layer<=R;layer++) {
-					nct=0;
-					// Current layer
-					for (int ci=0;ci<cct;ci++) {
-						int v=cpts[ci];
-						// Neighbors of points in current layer
-						for (int* p=ed[v];p<ed[v+1];p++) {
-							int u=*p;
-							// Only count contributions of unvisited neighbors
-							if (seen[u]!=visit) {
-								seen[u]=visit; npts[nct++]=u;
-								val+=weights[layer]*in[u];
-							}
-						}
-					}
-					cct=nct;
-					int* tmp=cpts; cpts=npts; npts=tmp;
-					// If there are no new neighbors
-					if (cct==0) break;
-				}
-				out[g]=val;
-			}
-			// The edges are unfiltered but will still be Lognormal
-			else out[g]=mu*A+gsl_ran_gaussian_ziggurat(rng,s*sqrt(B));
-		}
-	}
-	for (i=0;i<n;i++) {
-		out[i]=exp(out[i]);
-		//printf("%g\n",out[i]);
-	}
-	//printf("\n");
-	delete [] cpts; delete[] npts;
-	delete [] seen;
-	delete [] weights;
-	delete [] in;
 }

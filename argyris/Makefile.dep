@@ -1,0 +1,9 @@
+rk4.o: ../crumple/rk4.cc ../crumple/rk4.hh
+mesh.o: mesh.cc mesh.hh ../crumple/common.hh ../crumple/rk4.hh ../crumple/mesh_param.hh ../crumple/ext_potential.hh
+mesh_en.o: ../crumple/mesh_en.cc mesh.hh ../crumple/common.hh ../crumple/rk4.hh ../crumple/mesh_param.hh \
+ ../crumple/ext_potential.hh
+deformation.o: ../crumple/deformation.cc mesh.hh
+mesh_io.o: mesh_io.cc mesh.hh ../crumple/common.hh ../crumple/rk4.hh ../crumple/mesh_param.hh \
+ ../crumple/ext_potential.hh
+common.o: ../crumple/common.cc ../crumple/common.hh
+pre_comps.o: pre_comps.cc pre_comps.hh
