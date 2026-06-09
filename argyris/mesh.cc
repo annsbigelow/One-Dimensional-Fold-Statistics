@@ -126,7 +126,10 @@ void mesh::setup_springs() {
         }
         edp++;
     }
-
+	for (int i=0;i<5*ntri;i++) {
+		printf("%d ",tom[i]);
+	}
+	printf("\n");
 	// Initialize force vector in FEM computations
 	P=new double[3*n];
 	top=tom;
@@ -202,7 +205,7 @@ void mesh::setup_springs() {
 }
 
 int mesh::edge_lookup(int i,int j) {
-    if(j>i) {int k=j;j=i;i=k;}
+    if(i>j) {int k=j;j=i;i=k;}
     for(int *eop=eo[i];eop<eo[i+1];eop++) {
         if(*eop==j) return int(eop-eom);
     }
