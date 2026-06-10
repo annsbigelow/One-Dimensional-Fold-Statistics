@@ -80,8 +80,6 @@ class mesh : public mesh_param {
         int **to;
         /** Memory for the triangular elements of the mesh. */
         int *tom;
-		/** FEM bool: whether to use mass lumping */
-		bool lump;
 		/** FEM bool: whether to use conjugate gradient instead of sparse direct solver */
 		bool CG;
 		/** FEM bool: whether to use incomplete Cholesky as a CG preconditioner. */
@@ -98,7 +96,6 @@ class mesh : public mesh_param {
 		double *M_lump;
 		/** FEM Forcing vector */
 		double *P;
-
 		/** Argyris degrees of freedom */
 		int Adof;
 		/** Half the Argyris degrees of freedom */
@@ -132,9 +129,7 @@ class mesh : public mesh_param {
 		/** FEM Helper Functions */
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
-		double FdPI(double F[4],double detF,int dPdX[6],int i,int m);
-		int delta(int m,int l);
-		void get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF);
+		int dmap(int alpha,int beta);
 		void fem_forces(double t_,double* in);
 
         //void accel_repulsive(double *in,double *acc);
@@ -202,9 +197,9 @@ class mesh : public mesh_param {
             return energy(fzt,in);
         }
         inline void dfun(double *in,double *out) {
-            for(int i=0;i<3*n;i++) out[i]=0.;
+            for(int i=0;i<Adof2;i++) out[i]=0.;
             fem_forces(fzt,in);
-            for(int i=0;i<3*n;i++) out[i]=-out[i];
+            for(int i=0;i<Adof2;i++) out[i]=-out[i];
         }
     private:
         /** The output directory filename, if present. */
@@ -222,8 +217,8 @@ class mesh : public mesh_param {
         void cyl_print(FILE *fp,double *p,double *q);
         void edge_force(double *in,double *acc,int i,int k);
 		void shrink_force(double fac,double* in, double* acc, int i);
-        void damp_force(double *in,double *acc,int i,int k);
-        void repulsive_force(double *in,double *acc,int i,int k);
+        //void damp_force(double *in,double *acc,int i,int k);
+        //void repulsive_force(double *in,double *acc,int i,int k);
         int edge_lookup(int i,int j);
         void min_message(int &piter,int iter,gsl_multimin_fdfminimizer *s,double &t0);
         inline bool find_unmarked(int j,int *&p) {

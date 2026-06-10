@@ -7,7 +7,6 @@
 #include <Eigen/SparseCholesky>
 #include <gsl/gsl_randist.h>
 
-// TODO - need to read in the precomputed tables (either as a binary file, or as source code (i.e. get MATLAB to print a C++ array.)
 // TODO - use the triangle table to set up mass matrix and do F computations
 // TODO - update output routines to print the smooth Argyris triangles
 
@@ -143,7 +142,7 @@ void mesh::setup_springs() {
 		while(top<to[Ti+1]) { // Loop through triangles
 			// Get coordinates from ref. domain
 			int v[3]={Ti,*top,top[1]}; // Vertices 0,1,2
-			int ed[3]={top[2],top[3],top[4]}; // Edges 0,1,2
+			int ed[3]={top[2],top[4],top[3]}; // Edges 0,2,1
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -217,59 +216,44 @@ void mesh::print_pts(double *pt_array) {
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
-    double *acc=out+3*n;
+    double *acc=out+Adof2;
     int i;
 	// Add forces coming from finite-element (FEM) computations
-	arr_zeros(P,3*n);
+	arr_zeros(P,Adof2);
 	fem_forces(t_,in);
 
-	if (lump) {
-		// Air-resistance-type drag
-		// (acceleration) = - (const.)*(velocity)
-		for(double *ap=acc,*vp=in+3*n,*Mp=M_lump;ap<acc+3*n;)
-			*(ap++)=-*(vp++)*drag / *(Mp++);
-
-		// XXX - we can ignore this for now
-		// contact_forces(in,out);
-		for(double *ap=acc,*Fp=P,*Mp=M_lump;ap<acc+3*n;) *(ap++) += *(Fp++) / *(Mp++);
-	}
-	else {
-		Eigen::VectorXd f_sum(3*n), av(3*n);
-		double *vp=in+3*n;
-		for (int i=0;i<3*n;i++) f_sum[i] = P[i]-drag*vp[i];
-		if (CG) { // Conjugate Gradient solver
-			av=cg_solver.solve(f_sum);
-			//printf("CG iterations: %ld\nCG estimated error: %f\n", cg_solver.iterations(),cg_solver.error());
-		}
-		else if (PCG) { // Incomplete Cholesky PCG
-			av=pcg_solver.solve(f_sum);
-			if (pcg_solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
-		}
-		else { // Cholesky direct solver
-			av=solver.solve(f_sum);
-			if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
-		}
-		std::memcpy(acc,av.data(),3*n*sizeof(double));
-	}
+	Eigen::VectorXd f_sum(Adof2), av(Adof2);
+	double *vp=in+Adof2;
+	for (int i=0;i<Adof2;i++) f_sum[i] = P[i]-drag*vp[i];
+	// Cholesky direct solver
+	av=solver.solve(f_sum);
+	if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
+	std::memcpy(acc,av.data(),Adof2*sizeof(double));
 
     // Assemble the velocities in the first part of the out array. In addition,
     // zero out the forces for nodes on the boundary, if required.
     if(fix_boundary) {
-        for(i=0;i<n;i++) {
+        for(i=0;i<n;i++)
+		for(int k=0;k<6;k++){
             if(ncn[i]&bflag) {
-                out[3*i]=out[3*i+1]=out[3*i+2]=0;
-                acc[3*i]=acc[3*i+1]=acc[3*i+2]=0;
-            } else {
-                out[3*i]=in[3*n+3*i];
-                out[3*i+1]=in[3*n+3*i+1];
-                out[3*i+2]=in[3*n+3*i+2];
-            }
+                out[6*i+k]=0;
+                acc[6*i+k]=0;
+            } else out[6*i+k]=in[Adof2+6*i+k];
         }
-    } else for(i=0;i<n;i++) {
-        out[3*i]=in[3*n+3*i];
-        out[3*i+1]=in[3*n+3*i+1];
-        out[3*i+2]=in[3*n+3*i+2];
-    }
+		// Edge dofs
+		for(i=0;i<ns;i++) {
+			if(ncn[i]&bflag) {
+				out[6*n+i]=0; acc[6*n+i]=0;
+			} else out[6*n+i]=in[Adof2+6*n+i];
+		}
+    } else {
+		for(i=0;i<n;i++)
+		for(int k=0;k<6;k++) {
+        out[6*i+k]=in[Adof2+6*i+k];
+		}
+		// Edge dofs
+		for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
+	}
 }
 
 /** Adds in the contact forces between nodes in the mesh.
@@ -337,79 +321,60 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions. */
 void mesh::fem_forces(double t_,double *in) {
-	// Gradients of basis functions listed as dPsi/dX, dPsi/dY
-	//int dPdX[6]={-1,1,0, -1,0,1};
-
     int *top=tom;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {
-			/*int v[3]={Ti,*top,top[1]};
-			double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
-					*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
-					*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
-			double F[4]={x2-x1,x3-x1,y2-y1,y3-y1};
-			double detF=F[0]*F[3]-F[1]*F[2];
-			if (detF < 1e-12) { //DIAGNOSTIC
-				fprintf(stderr,"Error: detF is small or negative. A triangle's vertices may be stored clockwise.\n");
-				break;
+			int v[3]={Ti,*top,top[1]};
+			int ed[3]={top[2],top[4],top[3]}; // Edges 0,2,1
+			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+			double F_T[4]={x2-x1,x3-x1,y2-y1,y3-y1};
+			double detF=F_T[0]*F_T[3]-F_T[1]*F_T[2];
+			double fac=1/(detF*detF*detF*detF);
+			double F_inv[4] = {F_T[3], -F_T[1], -F_T[2], F_T[0]};
+			double prefac=kappa*detF; // Use the same bending modulus as before?
+
+			int argv[21]; // Global triangle dofs indices
+			for (int i=0;i<3;i++) {
+				// Edges dofs
+				argv[18+i]=6*n+ed[i];
+				// Nodal dofs
+				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
 			}
-
-			// Build Pk (independent of psi_i)
-			double Pk[3][2];
-			double *qT[3]={in+3*v[0], in+3*v[1], in+3*v[2]};
-			for (int k=0;k<3;k++) get_hatP(Pk[k],k,qT,dPdX,F,detF);
-
-			// Assemble fem force vector
-			for (int i=0;i<3;i++) // Loop through triangle vertices
-			for (int k=0;k<3;k++) { // Loop through vector components
-				double Ak=Pk[k][0]*FdPI(F,detF,dPdX,i,0) + Pk[k][1]*FdPI(F,detF,dPdX,i,1);
-				P[3*v[i]+k]-=detF*Ak/2;
-			}*/
-            top+=2;
+			
+			for (int I=0;I<21;I++) {
+			double w=0.;
+			for (int J=0;J<21;J++) {
+				double GH[4] = { 0.,0.,0.,0. };
+				for (int alpha=0;alpha<2;alpha++)
+				for (int beta=0;beta<2;beta++) {
+					int r = dmap(alpha,beta);
+					for (int del=0;del<2;del++)
+					for (int gam=0;gam<2;gam++) {
+						int s = dmap(del,gam);
+						for (int k1=0;k1<2;k1++)
+						for (int k2=0;k2<2;k2++)
+							GH[2*k1+k2] += fac*F_inv[2*alpha+k1]*F_inv[2*beta+k1]*
+									F_inv[2*del+k2]*F_inv[2*gam+k2]*F[9*(21*J+I)+3*r+s];
+					}
+				}
+				double w_i = *(in+argv[J]);
+				w += w_i*(GH[0]+GH[1]+GH[2]+GH[3]);
+			}
+			P[argv[I]] += prefac*w;
+			}
+            top+=5;
         }
     }
-    // Add accelerations from the external potentials
-    //for(int i=0;i<n_ep;i++) ex_pot[i]->accel(t_,n,in,acc);
 }
 
-/* Compute a row of the block matrix P_hat used FEM force calculations.
-*	\param[in] k the row of P to return
-*/
-void mesh::get_hatP(double(&hatP_k)[2],int k,double* qT[3],int dPdX[6],double F[4],double detF) {
-	hatP_k[0]=0.;
-	hatP_k[1]=0.;
-
-	// grad q
-	double G[3][2] = {0.};
-	for (int p=0;p<3;p++)
-	for (int m=0;m<2;m++)
-	for (int i=0;i<3;i++) {
-		double *qTi=qT[i]; // 3 components of i-th node
-		G[p][m] += qTi[p]*FdPI(F,detF,dPdX,i,m);
-	}
-	// trace(G^T G)
-	double C=0.;
-	for (int p=0;p<3;p++)
-	for (int m=0;m<2;m++) C+=G[p][m]*G[p][m];
-	// G^T G
-	double D[2][2] = {0};
-	for (int m=0;m<2;m++)
-	for (int l=0;l<2;l++)
-	for (int p=0;p<3;p++) D[m][l]+=G[p][m]*G[p][l];
-
-	for (int l=0;l<2;l++)
-	for (int m=0;m<2;m++) hatP_k[l] += G[k][m]*( lambda*.5*(C - 2.)*delta(m,l) + mu_fem*(D[m][l]-delta(m,l)) );
-}
-
-int mesh::delta(int m, int l) {
-	return (l==m?1:0);
-}
-
-/** A component of the inverse-transpose of the reference mapping matrix
-	multiplied by the gradient of a basis function. */
-double mesh::FdPI(double F[4],double detF,int dPdX[6],int i,int m) {
-	if (m==0) return (dPdX[i]*F[3] - dPdX[3+i]*F[2])/detF;
-	else return (dPdX[3+i]*F[0] - dPdX[i]*F[1])/detF;
+int mesh::dmap(int alpha, int beta) {
+	int r;
+	if (alpha==0 && beta==0) r=0;
+	else if (alpha==1 && beta==1) r=2;
+	else r=1;
+	return r;
 }
 
 /** Computes the energy.
@@ -432,7 +397,7 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
     double sx=0.,sy=0.,sz=0.,fac=1./static_cast<double>(n);
 
     // Compute the centroid
-    for(double *p=pts;p<pts+3*n;p+=3) {
+    for(double *p=pts;p<pts+3*n;p+=3) { // TODO: Adjust this for new dofs
         sx+=*p;sy+=p[1];sz+=p[2];
     }
     sx*=fac;sy*=fac;sz*=fac;
@@ -447,16 +412,16 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
     wx*=fac;wy*=fac;wz*=fac;
 }
 
-void mesh::damp_force(double *in,double *acc,int i,int k) {
+/*void mesh::damp_force(double *in,double *acc,int i,int k) {
     double *ii=in+3*(i+n),*ik=in+3*(k+n),*ai=acc+3*i,*ak=acc+3*k,
            dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2];
 
     // Add the force contributions to the two vertices
     *ai-=dx*B;ai[1]-=dy*B;ai[2]-=dz*B;
     *ak+=dx*B;ak[1]+=dy*B;ak[2]+=dz*B;
-}
+}*/
 
-void mesh::repulsive_force(double *in,double *acc,int i,int k) {
+/*void mesh::repulsive_force(double *in,double *acc,int i,int k) {
     double *ii=in+3*i,*ik=in+3*k,*ai=acc+3*i,*ak=acc+3*k,
            dx=*ii-*ik,dy=ii[1]-ik[1],dz=ii[2]-ik[2],
            r=sqrt(dx*dx+dy*dy+dz*dz);
@@ -475,7 +440,7 @@ void mesh::repulsive_force(double *in,double *acc,int i,int k) {
         ak[1]-=dy;
         ak[2]-=dz;
     }
-}
+}*/
 
 /** Adds an external potential to the class.
  * \param[in] ep a pointer to the potential to add. */
