@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <omp.h>
 
 #include "mesh.hh"
 
@@ -19,5 +20,8 @@ int main() {
 	mp.lump = false;
 	mp.PCG = false; 
 	mp.CG = false;
+
+	double start_time = omp_get_wtime();
 	mp.setup_springs();
+	printf("Triangle table and mass matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
 }

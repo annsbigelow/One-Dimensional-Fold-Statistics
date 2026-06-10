@@ -126,82 +126,62 @@ void mesh::setup_springs() {
         }
         edp++;
     }
-	for (int i=0;i<5*ntri;i++) {
-		printf("%d ",tom[i]);
-	}
-	printf("\n");
+
 	// Initialize force vector in FEM computations
-	P=new double[3*n];
+	P=new double[Adof2];
 	top=tom;
 
-	// WITH MASS LUMPING
-	/*if (lump) {
-		double a=rho/6;
-		M_lump=new double[3*n]; arr_zeros(M_lump,3*n);
-		// Loop through generating indices
-		for(int Ti=0;Ti<n;Ti++) {
-			while(top<to[Ti+1]) {
-				// Get coordinates from ref. domain
-				int v[3]={Ti,*top,top[1]};
-				double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
-						*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
-						*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
-				// Reference mapping
-				double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-				double mass=detF*a;
-				if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
-				// Loop through nodes and vector components of nodes to assemble M
-				for (int i=0;i<3;i++)
-				for (int k=0;k<3;k++) M_lump[3*v[i]+k]+=mass;
-				top+=2; //TODO - would become 5
+	// W/O MASS LUMPING
+	// Build a list of triplets for fast computation
+	M_sp.resize(Adof2,Adof2);
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	// Get (estimated) memory up front for performance
+	triplets.reserve(6*Adof2);
+
+	for(int Ti=0;Ti<n;Ti++) { // Loop through generating indices
+		while(top<to[Ti+1]) { // Loop through triangles
+			// Get coordinates from ref. domain
+			int v[3]={Ti,*top,top[1]}; // Vertices 0,1,2
+			int ed[3]={top[2],top[3],top[4]}; // Edges 0,1,2
+			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+			// Reference mapping
+			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+
+			if (detF<1e-16) { // DIAGNOSTIC
+				fprintf(stderr, "Reference mapping has det(F)<=0.\n"); 
+				exit(1);
 			}
+
+			double mass = detF*rho;
+			int argv[21]; // Global triangle dofs indices
+			for (int i=0;i<3;i++) {
+				// Edges dofs
+				argv[18+i]=6*n+ed[i];
+				// Nodal dofs
+				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
+			}
+			for (int I=0;I<21;I++)
+			for (int J=0;J<21;J++)
+				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*S[21*I+J]));
+
+			top+=5;
 		}
 	}
-	// W/O MASS LUMPING
-	else {
-		// Build a list of triplets to store mass matrix in compressed form
-		M_sp.resize(3*n,3*n);
-		typedef Eigen::Triplet<double> T;
-		std::vector<T> triplets;
-		// Get (estimated) memory up front for performance
-		triplets.reserve(18*n);
 
-		int S[9]={2,1,1, 1,2,1, 1,1,2};
-		double a=rho/24;
-		for(int Ti=0;Ti<n;Ti++) {
-			while(top<to[Ti+1]) {
-				// Get coordinates from ref. domain
-				int v[3]={Ti,*top,top[1]};
-				double *v1=sh_pts+3*v[0], x1=*v1, y1=v1[1],
-						*v2=sh_pts+3*v[1], x2=*v2, y2=v2[1],
-						*v3=sh_pts+3*v[2], x3=*v3, y3=v3[1];
-				// Reference mapping
-				double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-				double mass=detF*a;
-				if (detF<1e-16) fprintf(stderr, "Reference mapping matrix is singular.\n"); // DIAGNOSTIC
-				// Loop through nodes and vector components of nodes to assemble M
-				for (int i=0;i<3;i++)
-				for (int j=0;j<3;j++)
-				for (int k=0;k<3;k++) {
-					int row=3*v[i]+k, col=3*v[j]+k;
-					triplets.push_back(Eigen::Triplet<double>(row,col,mass*S[3*i+j]));
-				}
-				top+=2; // TODO - would become 5
-			}
-		}
+	// Convert triplets list to SparseMatrix.
+	// Contributions in same row,col are summed automatically.
+	M_sp.setFromTriplets(triplets.begin(),triplets.end());
+	printf("Sparse mass matrix assembled\n");
+	printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
 
-		// Convert triplets list to SparseMatrix.
-		// Contributions in same row,col are summed automatically.
-		M_sp.setFromTriplets(triplets.begin(),triplets.end());
-		printf("Sparse mass matrix assembled\n");
-		*/
-		/*
-		// Factorize sparse matrix using LLT Cholesky factorization
-		solver.analyzePattern(M_sp);
-		solver.factorize(M_sp);
-		if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
-		printf("Finished sparse matrix factorization.\n");
-	}*/
+	// Factorize sparse matrix using LLT Cholesky factorization
+	solver.analyzePattern(M_sp);
+	solver.factorize(M_sp);
+	if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+	printf("Finished sparse matrix factorization.\n");
 }
 
 int mesh::edge_lookup(int i,int j) {
