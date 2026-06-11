@@ -390,14 +390,15 @@ double mesh::energy(double t_,double *in) {
     return 0;
 }
 
+// OLD CENTRALIZE()
 /** Centralizes the mesh, and calculates its square width in each of the three
  * coordinate directions.
  * \param[out] (wx,wy,wz) the square widths in the three coordinate directions. */
-void mesh::centralize(double &wx,double &wy,double &wz) {
+ /*void mesh::centralize(double &wx,double &wy,double &wz) {
     double sx=0.,sy=0.,sz=0.,fac=1./static_cast<double>(n);
 
     // Compute the centroid
-    for(double *p=pts;p<pts+3*n;p+=3) { // TODO: Adjust this for new dofs
+    for(double *p=pts;p<pts+3*n;p+=3) { 
         sx+=*p;sy+=p[1];sz+=p[2];
     }
     sx*=fac;sy*=fac;sz*=fac;
@@ -410,6 +411,33 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
         wx+=*p*(*p);wy+=p[1]*p[1];wz+=p[2]*p[2];
     }
     wx*=fac;wy*=fac;wz*=fac;
+}*/
+
+
+// NEW centralize()
+void mesh::centralize(double &wx,double &wy,double &wz) {
+	// TODO: unsure: I think all z-positions and gradients are zero initially
+	arr_zeros(pts, Adof2);
+
+    double sx=0.,sy=0.,sz=0.,fac=1./static_cast<double>(n);
+
+    // Compute the centroid
+    for(double *p=xyz;p<xyz+3*n;p+=3) {
+        sx+=*p;sy+=p[1];sz+=p[2];
+    }
+    sx*=fac;sy*=fac;sz*=fac;
+
+    // Displace the mesh so its centroid is at the origin, and compute the
+    // variance of the vertices in each coordinate
+    wx=wy=wz=0;
+	// Nodes
+    for(double *p=pts,*xy=xyz;p<pts+6*n;p+=6,xy+=3) {
+        *xy-=sx;xy[1]-=sy;xy[2]-=sz;*p-=sz;
+        wx+=*xy*(*xy);wy+=xy[1]*xy[1];wz+=*p*(*p);
+    }
+    wx*=fac;wy*=fac;wz*=fac;
+	// Edges
+	for(double *p=pts+6*n;p<pts+Adof2;p++) *p-=sz;
 }
 
 /*void mesh::damp_force(double *in,double *acc,int i,int k) {

@@ -47,6 +47,7 @@ void mesh::read_positions(FILE *fp) {
     xyz=new double[3*n];
     safe_fread(xyz,sizeof(double),3*n,fp,"vertex positions");
 	for(int i=0;i<Adof2;i++) vel[i]=0.;
+	for(int i=0;i<n;i++) pts[6*i]=xyz[3*i+2];
 }
 
 /** Saves the node positions as text to a file.
@@ -244,7 +245,19 @@ void mesh::mesh_print_dense(int fr,double t_,double *in) {
     printf("# Output frame %d (t=%g)\n",fr,t_);
     sprintf(obuf,"%s/pts.%d",odir,fr);
     FILE *fp=safe_fopen(obuf,"wb");
-    fwrite(in,sizeof(double),Adof2,fp);
+
+	// TODO: delete later: print xyz coordinates only
+	// START TEST
+	double *Apts = new double[3*n]; 
+	for (int i=0,j=0;j<6*n;i+=3,j+=6) {
+		Apts[i] = xyz[i];
+		Apts[i+1] = xyz[i+1];
+		Apts[i+2] = pts[j];
+	}
+	fwrite(Apts,sizeof(double),3*n,fp);
+	delete[] Apts;
+	// END TEST
+    //fwrite(in,sizeof(double),Adof2,fp);
     fclose(fp);
 }
 
