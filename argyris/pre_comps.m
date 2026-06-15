@@ -56,21 +56,34 @@ idx = @(i,j) 1 + 6*i - i*(i-1)/2 + j;
 % Careful! S and Phi use 1-based indexing
 for I = 1:21
 for J = 1:21
-for p=0:10
-for q=0:10-p
-    % Define combined coefficients from basis function coefficients
-    c_pq=0;
     for i=0:5
     for j=0:5-i
-        m=p-i; n=q-j;
-        if (m>5 || n<0 || m<0 || m+n>5) continue;
-        end
+    for m=0:5
+    for n=0:5-m
+        p=i+m; q=j+n;
         a_glbl_idx = idx(i,j);
         b_glbl_idx = idx(m,n);
         ab = Phi(a_glbl_idx,I)*Phi(b_glbl_idx,J);
-        c_pq = c_pq + ab;
-    
-        % Force matrix
+
+        S(I,J) = S(I,J) + ab*fac(p,q);
+    end
+    end
+    end
+    end
+end
+end
+
+% Force tensor
+for I=1:21
+for J=1:21
+    for i=0:5
+    for j=0:5-i
+    for m=0:5
+    for n=0:5-m
+        a_glbl_idx = idx(i,j);
+        b_glbl_idx = idx(m,n);
+        ab = Phi(a_glbl_idx,I)*Phi(b_glbl_idx,J);
+        p=i+m; q=j+n;
         for r=1:3
             [alpha,beta]=dmap(r);
         for s=1:3
@@ -101,12 +114,11 @@ for q=0:10-p
         end
     end
     end
-    S(I,J) = S(I,J) + c_pq*factorial(p)*factorial(q)/factorial(p+q+2);
+    end
+    end
+end
+end
 
-end
-end
-end
-end
 disp('Finished assembly of stiffness and force matrices.');
 
 %% Reshape all arrays into flat vectors for output
@@ -116,7 +128,7 @@ Phi_out = reshape(Phi,[1,441]);
 S_out = reshape(S,[1,441]);
 % F_out[9(21*i+j) + 3r + s] = \int_R (H_i)_{ab}*(H_j)_{dg}
 %   where r->(a,b) and s->(d,g) via [a,b]=dmap(r) and [d,g]=dmap(s).
-% So, for each (i,j) there are 9 elements
+% So for each (i,j) there are 9 elements.
 % r,s=0,1,2.
 F_out = reshape(permute(F,[4 3 2 1]), [], 1);
 

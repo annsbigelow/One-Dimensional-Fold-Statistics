@@ -1,4 +1,6 @@
 #include <cstring>
+#include <fstream> //DEBUG
+#include <iostream>//DEBUG
 
 #include "mesh.hh"
 #include "../crumple/vec3.hh"
@@ -130,6 +132,9 @@ void mesh::setup_springs() {
 	P=new double[Adof2];
 	top=tom;
 
+	int signs[21];
+	for (int i=0;i<18;i++) signs[i]=1;
+
 	// W/O MASS LUMPING
 	// Build a list of triplets for fast computation
 	M_sp.resize(Adof2,Adof2);
@@ -146,14 +151,17 @@ void mesh::setup_springs() {
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+
+			// New: Test if normal vectors to the triangle point outward
+			if (x1-x2<0) for (int i=18;i<21;i++) signs[i]=-1;
+			else for (int i=18;i<21;i++) signs[i]=1;
+			
 			// Reference mapping
 			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-
-			if (detF<1e-16) { // DIAGNOSTIC
+			if (detF<1e-16) {
 				fprintf(stderr, "Reference mapping has det(F)<=0.\n"); 
 				exit(1);
 			}
-
 			double mass = detF*rho;
 			int argv[21]; // Global triangle dofs indices
 			for (int i=0;i<3;i++) {
@@ -163,8 +171,10 @@ void mesh::setup_springs() {
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
 			}
 			for (int I=0;I<21;I++)
-			for (int J=0;J<21;J++)
-				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*S[21*I+J]));
+			for (int J=0;J<21;J++) {
+				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],
+														signs[I]*signs[J]*mass*S[21*I+J]));
+			}
 
 			top+=5;
 		}
@@ -176,10 +186,28 @@ void mesh::setup_springs() {
 	printf("Sparse mass matrix assembled\n");
 	printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
 
+	//TODO: Delete: BEGIN DEBUG
+	printf("Nonzeros: %ld\n",M_sp.nonZeros());
+	printf("Size of M: %d\n",Adof2*Adof2);
+	printf("Edges: %d\n",ns);
+	Eigen::MatrixXd M_d(M_sp);
+	std::ofstream outputFile("Sparse matrix test 2.csv");
+	for (int i=0;i<M_d.rows();i++) {
+		for (int j=0;j<M_d.cols();j++) {
+			outputFile << M_d(i,j) << " ";
+		}
+		outputFile << std::endl; 
+	}
+	outputFile.close();
+	// END DEBUG
+
 	// Factorize sparse matrix using LLT Cholesky factorization
 	solver.analyzePattern(M_sp);
 	solver.factorize(M_sp);
-	if (solver.info()!=Eigen::Success) printf("Matrix factorization failed\n");
+	if (solver.info()!=Eigen::Success) {
+		printf("Matrix factorization failed\n");
+		exit(1);
+	}
 	printf("Finished sparse matrix factorization.\n");
 }
 
@@ -208,11 +236,12 @@ void mesh::print_triangle_table() {
 
 void mesh::print_pts(double *pt_array) {
 	for (int i = 0; i < n; i++) {
-		double* pt = pt_array + 3 * i;
-		printf("(%g,%g,%g)", pt[0], pt[1], pt[2]);
-		printf(" ");
+	for (int k=0; k<6;k++) {
+		double* pt = pt_array + 6 * i;
+		printf("%g ",pt[k]);
 	}
 	printf("\n");
+	}
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
@@ -321,19 +350,28 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions. */
 void mesh::fem_forces(double t_,double *in) {
+	// Keep track of orientations of triangles
+	int signs[21];
+	for (int i=0;i<18;i++) signs[i]=1;
+
     int *top=tom;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {
 			int v[3]={Ti,*top,top[1]};
-			int ed[3]={top[2],top[4],top[3]}; // Edges 0,2,1
+			int ed[3]={top[2],top[4],top[3]};
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
 			double F_T[4]={x2-x1,x3-x1,y2-y1,y3-y1};
 			double detF=F_T[0]*F_T[3]-F_T[1]*F_T[2];
+			double F_inv[4] = {F_T[3], -F_T[1], 
+								-F_T[2], F_T[0]};
 			double fac=1/(detF*detF*detF*detF);
-			double F_inv[4] = {F_T[3], -F_T[1], -F_T[2], F_T[0]};
-			double prefac=kappa*detF; // Use the same bending modulus as before?
+			double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
+
+			// New: Test if normal vectors to the triangle point outward
+			if (x1-x2<0) for (int i=18;i<21;i++) signs[i]=-1;
+			else for (int i=18;i<21;i++) signs[i]=1;
 
 			int argv[21]; // Global triangle dofs indices
 			for (int i=0;i<3;i++) {
@@ -343,9 +381,9 @@ void mesh::fem_forces(double t_,double *in) {
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
 			}
 			
-			for (int I=0;I<21;I++) {
-			double w=0.;
 			for (int J=0;J<21;J++) {
+			double w=0.;
+			for (int I=0;I<21;I++) {
 				double GH[4] = { 0.,0.,0.,0. };
 				for (int alpha=0;alpha<2;alpha++)
 				for (int beta=0;beta<2;beta++) {
@@ -356,13 +394,13 @@ void mesh::fem_forces(double t_,double *in) {
 						for (int k1=0;k1<2;k1++)
 						for (int k2=0;k2<2;k2++)
 							GH[2*k1+k2] += fac*F_inv[2*alpha+k1]*F_inv[2*beta+k1]*
-									F_inv[2*del+k2]*F_inv[2*gam+k2]*F[9*(21*J+I)+3*r+s];
+									F_inv[2*del+k2]*F_inv[2*gam+k2]*F[9*(21*I+J)+3*r+s];
 					}
 				}
-				double w_i = *(in+argv[J]);
-				w += w_i*(GH[0]+GH[1]+GH[2]+GH[3]);
+				double w_i = *(in+argv[I]);
+				w += w_i*signs[I]*(GH[0]+GH[1]+GH[2]+GH[3]);
 			}
-			P[argv[I]] += prefac*w;
+			P[argv[J]] += prefac*w*signs[J];
 			}
             top+=5;
         }
