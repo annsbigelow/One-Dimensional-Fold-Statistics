@@ -17,6 +17,7 @@
 #include <gsl/gsl_multimin.h>
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCholesky>
+#include <Eigen/Dense>
 
 double mesh_f(const gsl_vector *v,void *params);
 void mesh_df(const gsl_vector *v,void *params,gsl_vector *df);
@@ -100,6 +101,8 @@ class mesh : public mesh_param {
 		int Adof;
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
+		/** Argyris change of bases matrix inverse */
+		double C_inv[ntri][441];
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
