@@ -102,7 +102,7 @@ class mesh : public mesh_param {
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
 		/** Argyris change of bases matrix inverse */
-		double C_inv[ntri][441];
+		double *C_inv;
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -134,6 +134,7 @@ class mesh : public mesh_param {
 		void arr_zeros(double* A, int size);
 		int dmap(int alpha,int beta);
 		void fem_forces(double t_,double* in);
+		void buildC();
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);

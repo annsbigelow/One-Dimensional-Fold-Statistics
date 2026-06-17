@@ -10,9 +10,6 @@
 #include <Eigen/Dense>
 #include <gsl/gsl_randist.h>
 
-// TODO - make sure pts array is accessed correctly to apply change of basis
-// TODO - add in correct change of bases for mass matrix and force vector assembly
-// TODO - precompute the change of bases matrix inverse for each triangle (maybe put this in its own function)
 // TODO - update output routines to print the smooth Argyris triangles
 
 /** The constructor reads in a mesh from a file, and sets up the vertices and
@@ -68,6 +65,7 @@ mesh::~mesh() {
 
 	// FEM terms
 	delete[] M_lump; delete[] P;
+	delete[] C_inv;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -131,110 +129,12 @@ void mesh::setup_springs() {
         edp++;
     }
 
-	// Build change of bases matrix for each triangle
-	top=tom;
-	double D[504], E[504];
-	int tri=0;
-	for (int Ti=0;Ti<n;Ti++) {
-	while (top<to[Ti+1]) {
-		int v[3]={Ti,*top,top[1]}; // Vertices 1,2,3
-		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Affine transformation Jacobian
-		double B[4]={x2-x1,x3-x1,y2-y1,y3-y1};
-		// Hessian
-		double H[9]={	B[0]*B[0], 2*B[0]*B[2], B[2]*B[2],
-						B[1]*B[0], B[1]*B[2]+B[0]*B[3], B[2]*B[3],
-						B[1]*B[1], 2*B[3]*B[1], B[3]*B[3]	};
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	}; 
-		// Lengths of each side, squared 
-		double l2[3]={	vb[0]*vb[0]+vb[1]*vb[1],
-						vb[2]*vb[2]+vb[3]*vb[3],
-						vb[4]*vb[4]+vb[5]*vb[5]	};
-		// Build the change of bases for the normal derivatives
-		double a[6]={	B[1]/l2[0], B[3]/l2[0], // TODO: rewrite things in terms of vb for readability
-						-B[0]/l2[1], -B[2]/l2[1],
-			-(B[0]+B[1])/(sqrt(2)*l2[2]), -(B[2]+B[3])/(sqrt(2)*l2[2]) };
-		double Rv[6]={	-vb[1], vb[0],
-						-vb[3], vb[2],
-						-vb[5], vb[4]	};
-		double f[3], g[3];
-		for (int i=0;i<3;i++) {
-			f[i] = a[2*i]*Rv[2*i] + a[2*i+1]*Rv[2*i+1];
-			g[i] = a[2*i]*vb[2*i] + a[2*i+1]*vb[2*i+1];
-		}
-
-		// Build D, the left rectangular block matrix
-		arr_zeros(D,504); // TODO: may not work since arr_zeros takes in a pointer?
-		for (int i=0;i<3;i++) {
-			D[24*i+i]=1;
-			for (int I=0;I<2;I++) for (int J=0;J<2;J++)
-				D[24*(3+2*i+I)+3+2*i+J]=B[2*J+I];
-			for (int I=0;I<3;I++) for (int J=0;J<3;J++)
-				D[24*(9+3*i+I)+9+3*i+J]=H[3*I+J];
-			D[24*(18+i) + 18+i]=f[i];
-			D[24*(18+i) + 18+i + 3]=g[i];
-		}
-
-		// Build E, the right rectangular block matrix
-		arr_zeros(E,504); // TODO - arr_zeros may not work here
-		for (int i=0;i<18;i++) 
-			E[21*i+i]=1;
-		for (int i=0;i<3;i++)
-			E[21*(18+i)+18+i]=sqrt(l2[i]);
-		// Build the last block of E
-		double T1[9]={-1,1,0, -1,0,1, 0,-1,1};
-		double T2[18]={	vb[0],vb[1], vb[0],vb[1], 0,0,
-						vb[2],vb[3], 0,0, vb[2],vb[3],
-						0,0, vb[4],vb[5], vb[4],vb[5] };
-		double wa[9]={	v[0]*v[0], 2*v[0]*v[1], v[1]*v[1],
-						v[2]*v[2], 2*v[2]*v[3], v[3]*v[3],
-						v[4]*v[4], 2*v[4]*v[5], v[5]*v[5] };
-		double T3[27]={	-wa[0],-wa[1],-wa[2], wa[0],wa[1],wa[2], 0,0,0,
-						-wa[3],-wa[4],-wa[5], 0,0,0, wa[3],wa[4],wa[5],
-						0,0,0, -wa[6],-wa[7],-wa[8], wa[6],wa[7],wa[8] };
-		for (int i=0;i<3;i++) {
-			for (int j=0;j<3;j++) E[21*(21+i)+j] = 15*T1[3*i+j]/18;
-			for (int j=0;j<6;j++) E[21*(21+i)+j+3] = -7*T2[6*i+j]/16;
-			for (int j=0;j<9;j++) E[21*(21+i)+j+9] = T3[9*i+j]/32;
-		}
-
-		// TODO - output D, E for one triangle to check structure
-
-		// Multiply D and E to make C
-		double C[441];
-		for (int i=0;i<441;i++) C[i]=0.;
-		for (int i=0;i<21;i++)
-		for (int j=0;j<21;j++)
-		for (int k=0;k<24;k++)
-			C[21*i+j] += D[24*i+k]*E[21*k+j]; // Check that this works for filling C_eig
-
-		// Invert C using Eigen
-		Eigen::Map<Eigen::Matrix<double,21,21,Eigen::RowMajor> > C_eig(C);
-		// Check if C is invertible
-		Eigen::FullPivLU<Eigen::Matrix<double,21,21,Eigen::RowMajor> > lu(C_eig);
-		if (!lu.isInvertible()) {
-			printf("Change of bases matrix is not invertible.\n");
-			exit(1);
-		}
-		Eigen::Matrix<double,21,21,Eigen::RowMajor> Ce_inv = C_eig.inverse();
-		printf("Change of bases matrix successfully inverted.\n");
-		std::memcpy(C_loc_inv, Ce_inv.data(), 441*sizeof(double));
-
-		// TODO: Copy C_loc_inv into global C_inv table
-		
-	}
-	tri+=1;
-	}
-	printf("Check: tri (%d) should equal total number of triangles (%d)\n",tri,ntri);
+	// Build change of bases matrices
+	buildC();
+	printf("Change of bases matrices have been built.\n");
 
 	// Initialize force vector in FEM computations
 	P=new double[Adof2];
-	top=tom;
 
 	// Build the mass matrix
 	// Use a list of triplets for fast computation
@@ -244,11 +144,13 @@ void mesh::setup_springs() {
 	// Get (estimated) memory up front for performance
 	triplets.reserve(6*Adof2);
 
+	top=tom; 
+	int tri=0;
 	for(int Ti=0;Ti<n;Ti++) { // Loop through generating indices
 		while(top<to[Ti+1]) { // Loop through triangles
 			// Get coordinates from ref. domain
-			int v[3]={Ti,*top,top[1]}; // Vertices 0,1,2
-			int ed[3]={top[2],top[3],top[4]}; // Edges 0,1,2
+			int v[3]={Ti,*top,top[1]}; // Vertices 1,2,3
+			int ed[3]={top[2],top[3],top[4]}; // Edges 1,2,3
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -256,20 +158,39 @@ void mesh::setup_springs() {
 			// Reference map Jacobian
 			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
 			double mass = detF*rho;
+
 			int argv[21]; // Global triangle dofs indices
+			/*int j=3,j1=9,k;
+			for (k=0;k<3;k++) argv[k]=v[k]; // Function values
 			for (int i=0;i<3;i++) {
+				argv[18+i]=6*n+ed[i]; // Normal derivatives
+				for (k=1;k<3;k++) {
+					argv[j]=v[i]+k; // First derivatives 
+					j++;
+				}
+				for (k=3;k<6;k++) { // Second derivatives
+					argv[j1]=v[i]+k;
+					j1++;
+				}
+			}*/
+			for (int i=0;i<3;i++) { // TODO - Is this right? M, F, q ordered as they were?
 				// Edges dofs
 				argv[18+i]=6*n+ed[i];
 				// Nodal dofs
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
 			}
+
 			for (int I=0;I<21;I++)
 			for (int J=0;J<21;J++) {
-				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],
-														signs[I]*signs[J]*mass*S[21*I+J]));
+				double sum=0.;
+				for (int a=0;a<21;a++)
+				for (int b=0;b<21;b++) {
+					sum += C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J]*S[21*a+b];
+				}
+				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*sum));
 			}
 
-			top+=5;
+			top+=5; tri+=1;
 		}
 	}
 
@@ -282,7 +203,6 @@ void mesh::setup_springs() {
 	//TODO: Delete: BEGIN DEBUG
 	printf("Nonzeros: %ld\n",M_sp.nonZeros());
 	printf("Size of M: %d\n",Adof2*Adof2);
-	printf("Edges: %d\n",ns);
 	Eigen::MatrixXd M_d(M_sp);
 	std::ofstream outputFile("Sparse matrix test 2.csv");
 	for (int i=0;i<M_d.rows();i++) {
@@ -311,6 +231,110 @@ int mesh::edge_lookup(int i,int j) {
     }
     fputs("Can't find edge index\n",stderr);
     exit(1);
+}
+
+// Build change of bases matrix for each triangle
+void mesh::buildC() {
+	C_inv=new double[ntri*441];
+
+	int *top=tom;
+	double D[504], E[504];
+	int tri=0,i,j;
+	for (int Ti=0;Ti<n;Ti++) // Loop through triangles
+	while (top<to[Ti+1]) {
+		// Vertices 1,2,3
+		int v[3]={Ti,*top,top[1]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		// Sides of the triangle
+		double vb[6]={	x2-x1, y2-y1,
+						x3-x1, y3-y1,
+						x3-x2, y3-y2	}; 
+		// Affine transformation Jacobian
+		double B[4]={ vb[0],vb[2], vb[1],vb[3] };
+		// Hessian
+		double H[9]={	B[0]*B[0], 2*B[0]*B[2], B[2]*B[2],
+						B[1]*B[0], B[1]*B[2]+B[0]*B[3], B[2]*B[3],
+						B[1]*B[1], 2*B[3]*B[1], B[3]*B[3]	};
+		// Lengths of each side, squared 
+		double l2[3]={	vb[0]*vb[0]+vb[1]*vb[1],
+						vb[2]*vb[2]+vb[3]*vb[3],
+						vb[4]*vb[4]+vb[5]*vb[5]	};
+		// Build the change of bases for the normal derivatives
+		double a[6]={ vb[2]/l2[0], vb[3]/l2[0],
+					-vb[0]/l2[1], -vb[1]/l2[1],
+			-(vb[0]+vb[2])/(sqrt(2)*l2[2]), -(vb[1]+vb[3])/(sqrt(2)*l2[2]) };
+		// Normal vectors
+		double Rv[6]={	-vb[1], vb[0],
+						-vb[3], vb[2],
+						-vb[5], vb[4]	};
+		double f[3], g[3];
+		for (i=0;i<3;i++) {
+			f[i] = a[2*i]*Rv[2*i] + a[2*i+1]*Rv[2*i+1];
+			g[i] = a[2*i]*vb[2*i] + a[2*i+1]*vb[2*i+1];
+		}
+
+		// Build D, the left rectangular block matrix
+		arr_zeros(D,504);
+		for (i=0;i<3;i++) {
+			D[24*i+i]=1;
+			for (int I=0;I<2;I++) for (int J=0;J<2;J++)
+				D[24*(3+2*i+I)+3+2*i+J]=B[2*J+I];
+			for (int I=0;I<3;I++) for (int J=0;J<3;J++)
+				D[24*(9+3*i+I)+9+3*i+J]=H[3*I+J];
+			D[24*(18+i) + 18+i]=f[i];
+			D[24*(18+i) + 18+i + 3]=g[i];
+		}
+
+		// Build E, the right rectangular block matrix
+		arr_zeros(E,504);
+		for (i=0;i<18;i++) 
+			E[21*i+i]=1;
+		for (i=0;i<3;i++)
+			E[21*(18+i)+18+i]=sqrt(l2[i]);
+		// Final "T" block of E
+		double T1[9]={-1,1,0, -1,0,1, 0,-1,1};
+		double T2[18]={	vb[0],vb[1], vb[0],vb[1], 0,0,
+						vb[2],vb[3], 0,0, vb[2],vb[3],
+						0,0, vb[4],vb[5], vb[4],vb[5] };
+		double wa[9]={	vb[0]*vb[0], 2*vb[0]*vb[1], vb[1]*vb[1],
+						vb[2]*vb[2], 2*vb[2]*vb[3], vb[3]*vb[3],
+						vb[4]*vb[4], 2*vb[4]*vb[5], vb[5]*vb[5] };
+		double T3[27]={	-wa[0],-wa[1],-wa[2], wa[0],wa[1],wa[2], 0,0,0,
+						-wa[3],-wa[4],-wa[5], 0,0,0, wa[3],wa[4],wa[5],
+						0,0,0, -wa[6],-wa[7],-wa[8], wa[6],wa[7],wa[8] };
+		for (i=0;i<3;i++) {
+			for (j=0;j<3;j++) E[21*(21+i)+j] = 15*T1[3*i+j]/18;
+			for (j=0;j<6;j++) E[21*(21+i)+j+3] = -7*T2[6*i+j]/16;
+			for (j=0;j<9;j++) E[21*(21+i)+j+9] = T3[9*i+j]/32;
+		}
+
+		// Multiply D and E to make C
+		double C[441];
+		arr_zeros(C,441);
+		for (i=0;i<21;i++)
+		for (j=0;j<21;j++)
+		for (int k=0;k<24;k++)
+			C[21*i+j] += D[24*i+k]*E[21*k+j];
+
+		// Invert C using Eigen
+		Eigen::Map<Eigen::Matrix<double,21,21,Eigen::RowMajor> > C_eig(C);
+		Eigen::FullPivLU<Eigen::Matrix<double,21,21,Eigen::RowMajor> > lu(C_eig);
+		if (!lu.isInvertible()) {
+			printf("Error: Change of bases matrix is not invertible.\n");
+			exit(1);
+		}
+		Eigen::Matrix<double,21,21,Eigen::RowMajor> Ce_inv = C_eig.inverse();
+		double C_loc_inv[441];
+		std::memcpy(C_loc_inv, Ce_inv.data(), 441*sizeof(double));
+
+		// Copy local change of basis matrix into global C_inv table
+		for (int i=0;i<441;i++) C_inv[441*tri+i]=C_loc_inv[i];
+
+		top+=5;
+		tri+=1;
+	}
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -443,11 +467,11 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
  * \param[in] t_ the time at which to evaluate the acceleration.
  * \param[in] in the mesh point positions. */
 void mesh::fem_forces(double t_,double *in) {
-    int *top=tom;
+    int *top=tom, tri=0;
     for(int Ti=0;Ti<n;Ti++) {
         while(top<to[Ti+1]) {
 			int v[3]={Ti,*top,top[1]};
-			int ed[3]={top[2],top[4],top[3]};
+			int ed[3]={top[2],top[3],top[4]};
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -466,28 +490,33 @@ void mesh::fem_forces(double t_,double *in) {
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
 			}
 			
-			for (int J=0;J<21;J++) {
+			for (int J=0;J<21;J++) { // TODO - this is a lot of loops. Consolidate? Precompute C_inv*C_inv?
 			double w=0.;
 			for (int I=0;I<21;I++) {
-				double GH[4] = { 0.,0.,0.,0. };
-				for (int alpha=0;alpha<2;alpha++)
-				for (int beta=0;beta<2;beta++) {
-					int r = dmap(alpha,beta);
-					for (int del=0;del<2;del++)
-					for (int gam=0;gam<2;gam++) {
-						int s = dmap(del,gam);
-						for (int k1=0;k1<2;k1++)
-						for (int k2=0;k2<2;k2++)
-							GH[2*k1+k2] += fac*F_inv[2*alpha+k1]*F_inv[2*beta+k1]*
-									F_inv[2*del+k2]*F_inv[2*gam+k2]*F[9*(21*I+J)+3*r+s];
+				double GH = 0.;
+				for (int a=0;a<21;a++)
+				for (int b=0;b<21;b++) {
+					double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
+					for (int alpha=0;alpha<2;alpha++)
+					for (int beta=0;beta<2;beta++) {
+						int r = dmap(alpha,beta);
+						for (int del=0;del<2;del++)
+						for (int gam=0;gam<2;gam++) {
+							int s = dmap(del,gam);
+							for (int k1=0;k1<2;k1++)
+							for (int k2=0;k2<2;k2++)
+								GH += fac*F_inv[2*alpha+k1]*F_inv[2*beta+k1]*
+										F_inv[2*del+k2]*F_inv[2*gam+k2]*
+										F[9*(21*I+J)+3*r+s]*C_prod;
+						}
 					}
 				}
 				double w_i = *(in+argv[I]);
-				w += w_i*signs[I]*(GH[0]+GH[1]+GH[2]+GH[3]);
+				w += w_i*GH;
 			}
-			P[argv[J]] += prefac*w*signs[J];
+			P[argv[J]] += prefac*w;
 			}
-            top+=5;
+            top+=5; tri+=1;
         }
     }
 }
