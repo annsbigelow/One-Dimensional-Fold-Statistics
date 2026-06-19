@@ -160,25 +160,25 @@ void mesh::setup_springs() {
 			double mass = detF*rho;
 
 			int argv[21]; // Global triangle dofs indices
-			/*int j=3,j1=9,k;
-			for (k=0;k<3;k++) argv[k]=v[k]; // Function values
+			int j=3,j1=9,k;
+			for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
 			for (int i=0;i<3;i++) {
 				argv[18+i]=6*n+ed[i]; // Normal derivatives
 				for (k=1;k<3;k++) {
-					argv[j]=v[i]+k; // First derivatives 
+					argv[j]=6*v[i]+k; // First derivatives
 					j++;
 				}
 				for (k=3;k<6;k++) { // Second derivatives
-					argv[j1]=v[i]+k;
+					argv[j1]=6*v[i]+k;
 					j1++;
 				}
-			}*/
-			for (int i=0;i<3;i++) { // TODO - Is this right? M, F, q ordered as they were?
+			}
+			/*for (int i=0;i<3;i++) { // TODO - Is this right? M, F, q ordered as they were?
 				// Edges dofs
 				argv[18+i]=6*n+ed[i];
 				// Nodal dofs
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
-			}
+			}*/
 
 			for (int I=0;I<21;I++)
 			for (int J=0;J<21;J++) {
@@ -203,15 +203,15 @@ void mesh::setup_springs() {
 	//TODO: Delete: BEGIN DEBUG
 	printf("Nonzeros: %ld\n",M_sp.nonZeros());
 	printf("Size of M: %d\n",Adof2*Adof2);
-	Eigen::MatrixXd M_d(M_sp);
-	std::ofstream outputFile("Sparse matrix test 2.csv");
+	/*Eigen::MatrixXd M_d(M_sp);
+	std::ofstream outputFile("Sparse matrix test 6x6.csv");
 	for (int i=0;i<M_d.rows();i++) {
 		for (int j=0;j<M_d.cols();j++) {
 			outputFile << M_d(i,j) << " ";
 		}
 		outputFile << std::endl; 
 	}
-	outputFile.close();
+	outputFile.close();*/
 	// END DEBUG
 
 	// Factorize sparse matrix using LLT Cholesky factorization
@@ -233,7 +233,7 @@ int mesh::edge_lookup(int i,int j) {
     exit(1);
 }
 
-// Build change of bases matrix for each triangle
+// Build change of bases matrices for each triangle
 void mesh::buildC() {
 	C_inv=new double[ntri*441];
 
@@ -332,9 +332,76 @@ void mesh::buildC() {
 		// Copy local change of basis matrix into global C_inv table
 		for (int i=0;i<441;i++) C_inv[441*tri+i]=C_loc_inv[i];
 
-		top+=5;
-		tri+=1;
+		top+=5; tri+=1;
 	}
+}
+
+void mesh::Gauss_displacement() {
+	const double eps=0.1;
+	// Initialize function values and gradients at all nodes
+	for(int i=0;i<n;i++) {
+		double x=xyz[3*i], y=xyz[3*i+1];
+		double power = exp(-eps*(x*x+y*y));
+		// Displace the z-component
+		pts[6*i]+=-eps+0.02*power;
+		// First derivatives
+		pts[6*i+1]+=-eps*.04*x*power;
+		pts[6*i+2]+=-eps*.04*y*power;
+		// Second derivativs
+		pts[6*i+3]+=eps*(-.04 + eps*.08*x*x)*power;
+		pts[6*i+4]+=eps*eps*.08*x*y*power;
+		pts[6*i+5]+=eps*(-.04 + eps*.08*y*y)*power;
+	}
+
+	// Initialize normal derivatives
+	int *top=tom;
+	for (int Ti=0;Ti<n;Ti++)
+	while (top<to[Ti+1]) {
+		int v[3]={Ti,*top,top[1]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		// Sides of the triangle
+		double vb[6]={	x2-x1, y2-y1,
+						x3-x1, y3-y1,
+						x3-x2, y3-y2	};
+		// Lengths of each side
+		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
+						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
+						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+		// Midpoints of sides
+		double m[6]={	(x2+x1)/2, (y2+y1)/2,
+						(x3+x1)/2, (y3+y1)/2,
+						(x3+x2)/2, (y3+y2)/2 };
+		// Normal vectors
+		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
+						-vb[3]/l[1], vb[2]/l[1],
+						-vb[5]/l[2], vb[4]/l[2] };
+
+		pts[6*n+top[2]] += -eps*.04*m[0]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[0]
+							-eps*.04*m[1]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[1] ;
+		pts[6*n+top[3]] += -eps*.04*m[2]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[2]
+							-eps*.04*m[3]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[3] ;
+		pts[6*n+top[4]] += -eps*.04*m[4]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[4]
+							-eps*.04*m[5]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[5] ;
+
+		// Normal derivatives should cancel?
+		for (int i=2;i<5;i++) if (pts[6*n+top[i]]<1e-16) pts[6*n+top[i]]=0.;
+
+		top+=5;
+	}
+	// TODO - delete
+	/*printf("Nodes\n");
+	for (int i=0;i<n;i++) {
+		for (int k=0;k<6;k++) printf("%g ",pts[6*i+k]);
+		printf("\n");
+	}
+	printf("Edges\n");
+	for (int i=0;i<ns;i++) {
+		printf("%g ",pts[6*n+i]);
+	}
+	printf("\n");*/
+
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -370,8 +437,8 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
-	for (int i=0;i<Adof2;i++) f_sum[i] = P[i]-drag*vp[i];
-	// Cholesky direct solver
+	for (i=0;i<Adof2;i++) f_sum[i] = P[i]-drag*vp[i];
+	// Cholesky direct solver, a = f/m
 	av=solver.solve(f_sum);
 	if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
 	std::memcpy(acc,av.data(),Adof2*sizeof(double));
@@ -388,7 +455,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
         }
 		// Edge dofs
 		for(i=0;i<ns;i++) {
-			if(ncn[i]&bflag) {
+			if(ncn[i]&bflag) { // TODO - this is wrong. ncn has n elements. Loop through triangles.
 				out[6*n+i]=0; acc[6*n+i]=0;
 			} else out[6*n+i]=in[Adof2+6*n+i];
 		}
@@ -483,14 +550,27 @@ void mesh::fem_forces(double t_,double *in) {
 			double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
 
 			int argv[21]; // Global triangle dofs indices
+			int j=3,j1=9,k;
+			for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
 			for (int i=0;i<3;i++) {
+				argv[18+i]=6*n+ed[i]; // Normal derivatives
+				for (k=1;k<3;k++) {
+					argv[j]=6*v[i]+k; // First derivatives
+					j++;
+				}
+				for (k=3;k<6;k++) { // Second derivatives
+					argv[j1]=6*v[i]+k;
+					j1++;
+				}
+			}
+			/*for (int i=0;i<3;i++) {
 				// Edges dofs
 				argv[18+i]=6*n+ed[i];
 				// Nodal dofs
 				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
-			}
+			}*/
 			
-			for (int J=0;J<21;J++) { // TODO - this is a lot of loops. Consolidate? Precompute C_inv*C_inv?
+			for (int J=0;J<21;J++) { // TODO - this is a lot of loops and is super slow. Consolidate? Precompute C_inv*C_inv?
 			double w=0.;
 			for (int I=0;I<21;I++) {
 				double GH = 0.;

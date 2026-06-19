@@ -135,6 +135,7 @@ class mesh : public mesh_param {
 		int dmap(int alpha,int beta);
 		void fem_forces(double t_,double* in);
 		void buildC();
+		void Gauss_displacement();
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);

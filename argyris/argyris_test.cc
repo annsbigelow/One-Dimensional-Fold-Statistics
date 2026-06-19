@@ -9,7 +9,7 @@ int main() {
 
 	// Create mesh and initialize acceleration
 	mesh_param par(0.05, 0.03, 0.001, false, false);
-	mesh_rk4 mp(par, "sh48_6x6.bin");
+	mesh_rk4 mp(par, "sh48_3x3.bin");
 
 	// Centralize and scale the mesh
 	double wx, wy, wz;
@@ -23,14 +23,13 @@ int main() {
 
 	// Apply perturbation in z-direction
 	// Add Gaussian displacement around the central location
-    for(double *p=mp.pts,*xy=mp.xyz; p<mp.pts+6*mp.n; p+=6,xy+=3) {
-        *p+=-0.1+0.02*exp(-0.1*(*xy*(*xy)+xy[1]*xy[1]));
-	}
+	// including the gradient values!
+	mp.Gauss_displacement();
 
 	// Setup the output directory and allocate memory for integrator.
 	mp.setup_output_dir("Argyris_Test.odr");
 
 	// Solve!
-	mp.solve_adaptive(2, 1e-4, 1e-4, false, 2);
+	mp.solve_adaptive(1, 1e-4, 1e-4, false, 1);
 	printf("Elapsed solution time: %g seconds\n", omp_get_wtime() - start_time);
 }
