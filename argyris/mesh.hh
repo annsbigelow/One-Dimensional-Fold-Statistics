@@ -132,7 +132,6 @@ class mesh : public mesh_param {
 		/** FEM Helper Functions */
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
-		int dmap(int alpha,int beta);
 		void fem_forces(double t_,double* in);
 		void buildC();
 		void Gauss_displacement();

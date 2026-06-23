@@ -86,25 +86,19 @@ for J=1:21
         b_glbl_idx = idx(m,n);
         ab = Phi(a_glbl_idx,I)*Phi(b_glbl_idx,J);
         p=i+m; q=j+n;
-        for r=1:3
-            [alpha,beta]=dmap(r);
-        for s=1:3
-            [delta,gamma]=dmap(s);
-
-            cross_ab = D(alpha,2)*D(beta,1) + D(alpha,1)*D(beta,2);
-            cross_dg = D(delta,2)*D(gamma,1) + D(delta,1)*D(gamma,2);
+        for r=0:2
+        for s=0:2
+            a=i*m*(i-1)*(m-1)*delta(r,0)*delta(s,0);
+            b=i*m*n*(i-1)*delta(r,0)*delta(s,1);
+            c=i*n*(i-1)*(n-1)*delta(r,0)*delta(s,2);
+            d=i*j*m*(m-1)*delta(r,1)*delta(s,0);
+            e=i*j*m*n*delta(r,1)*delta(s,1);
+            f=i*j*n*(n-1)*delta(r,1)*delta(s,2);
+            g=j*m*(j-1)*(m-1)*delta(r,2)*delta(s,0);
+            h=j*m*n*(j-1)*delta(r,2)*delta(s,1);
+            k=j*n*(j-1)*(n-1)*delta(r,2)*delta(s,2);
     
-            a=i*m*(i-1)*(m-1)*D(alpha,1)*D(beta,1)*D(delta,1)*D(gamma,1);
-            b=i*m*n*(i-1)*D(alpha,1)*D(beta,1)*cross_dg;
-            c=i*n*(i-1)*(n-1)*D(alpha,1)*D(beta,1)*D(delta,2)*D(gamma,2);
-            d=i*j*m*(m-1)*D(delta,1)*D(gamma,1)*cross_ab;
-            e=i*j*m*n*cross_ab*cross_dg;
-            f=i*j*n*(n-1)*D(delta,2)*D(gamma,2)*cross_ab;
-            g=j*m*(j-1)*(m-1)*D(alpha,2)*D(beta,2)*D(delta,1)*D(gamma,1);
-            h=j*m*n*(j-1)*D(alpha,2)*D(beta,2)*cross_dg;
-            k=j*n*(j-1)*(n-1)*D(alpha,2)*D(beta,2)*D(delta,2)*D(gamma,2);
-    
-            F(I,J,r,s) = F(I,J,r,s) + ...
+            F(I,J,r+1,s+1) = F(I,J,r+1,s+1) + ...
                 ab*( ...
                 a*fac(p-4,q) ...
                 +(b+d)*fac(p-3,q-1) ...
@@ -235,22 +229,11 @@ function z = fac(r,s)
 end
 
 % Kronecker delta
-function out = D(a,b)
+function out = delta(a,b)
     if a==b
         out=1;
     else
         out=0;
-    end
-end
-
-% r->(alpha,beta) mapping
-function [alpha,beta] = dmap(r)
-    if r==1
-        alpha=1; beta=1;
-    elseif r==2
-        alpha=1;beta=2;
-    elseif r==3
-        alpha=2;beta=2;
     end
 end
 

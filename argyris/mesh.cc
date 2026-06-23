@@ -542,11 +542,9 @@ void mesh::fem_forces(double t_,double *in) {
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-			double F_T[4]={x2-x1,x3-x1,y2-y1,y3-y1};
-			double detF=F_T[0]*F_T[3]-F_T[1]*F_T[2];
-			double F_inv[4] = {F_T[3], -F_T[1], 
-								-F_T[2], F_T[0]};
-			double fac=1/(detF*detF*detF*detF);
+			double B[4]={x2-x1,x3-x1,y2-y1,y3-y1};
+			double detF=B[0]*B[3]-B[1]*B[2];
+			double fac=1/(detF*detF);
 			double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
 
 			int argv[21]; // Global triangle dofs indices
@@ -563,50 +561,28 @@ void mesh::fem_forces(double t_,double *in) {
 					j1++;
 				}
 			}
-			/*for (int i=0;i<3;i++) {
-				// Edges dofs
-				argv[18+i]=6*n+ed[i];
-				// Nodal dofs
-				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
-			}*/
+			double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
+				-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
 			
 			for (int J=0;J<21;J++) { // TODO - this is a lot of loops and is super slow. Consolidate? Precompute C_inv*C_inv?
-			double w=0.;
-			for (int I=0;I<21;I++) {
-				double GH = 0.;
-				for (int a=0;a<21;a++)
-				for (int b=0;b<21;b++) {
-					double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
-					for (int alpha=0;alpha<2;alpha++)
-					for (int beta=0;beta<2;beta++) {
-						int r = dmap(alpha,beta);
-						for (int del=0;del<2;del++)
-						for (int gam=0;gam<2;gam++) {
-							int s = dmap(del,gam);
-							for (int k1=0;k1<2;k1++)
-							for (int k2=0;k2<2;k2++)
-								GH += fac*F_inv[2*alpha+k1]*F_inv[2*beta+k1]*
-										F_inv[2*del+k2]*F_inv[2*gam+k2]*
-										F[9*(21*I+J)+3*r+s]*C_prod;
-						}
+				double w=0.;
+				for (int I=0;I<21;I++) {
+					double HaHb=0.;
+					for (int a=0;a<21;a++)
+					for (int b=0;b<21;b++) {
+						double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
+						for (int r=0;r<3;r++)
+						for (int s=0;s<3;s++)
+							HaHb += The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod;
 					}
+					double w_i = *(in+argv[I]);
+					w += w_i*HaHb;
 				}
-				double w_i = *(in+argv[I]);
-				w += w_i*GH;
-			}
-			P[argv[J]] += prefac*w;
+				P[argv[J]] += prefac*w;
 			}
             top+=5; tri+=1;
         }
     }
-}
-
-int mesh::dmap(int alpha, int beta) {
-	int r;
-	if (alpha==0 && beta==0) r=0;
-	else if (alpha==1 && beta==1) r=2;
-	else r=1;
-	return r;
 }
 
 /** Computes the energy.
