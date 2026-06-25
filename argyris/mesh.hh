@@ -87,22 +87,18 @@ class mesh : public mesh_param {
 		bool PCG;
 		/** FEM Sparse mass matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
-		/** FEM Conjugate Gradient solver */
-		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower|Eigen::Upper> cg_solver;
-		/** FEM Preconditioned Conjugate Gradient solver */
-		Eigen::ConjugateGradient<Eigen::SparseMatrix<double>,Eigen::Lower|Eigen::Upper,Eigen::IncompleteCholesky<double> > pcg_solver;
 		/** FEM Mass matrix Sparse Cholesky solver */
 		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
-		/** FEM Mass matrix, lumped via row-sum */
-		double *M_lump;
-		/** FEM Forcing vector */
-		double *P;
+		/** FEM Biharmonic term */
+		Eigen::VectorXd Kq;
 		/** Argyris degrees of freedom */
 		int Adof;
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
 		/** Argyris change of bases matrix inverse */
 		double *C_inv;
+		/** Argyris stiffness matrix */
+		Eigen::SparseMatrix<double, Eigen::RowMajor> Kd;
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -112,6 +108,7 @@ class mesh : public mesh_param {
         void mesh_ff(double t_,double *in,double *out);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);
+		void mesh_print_last_step();
         void centralize(double &wx,double &wy,double &wz);
         void read_topology(FILE *fp);
         void read_positions(FILE *fp);
@@ -132,9 +129,10 @@ class mesh : public mesh_param {
 		/** FEM Helper Functions */
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
-		void fem_forces(double t_,double* in);
+		void Kq_multiply(double* in);
 		void buildC();
 		void Gauss_displacement();
+		void assemble_K();
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
@@ -202,7 +200,7 @@ class mesh : public mesh_param {
         }
         inline void dfun(double *in,double *out) {
             for(int i=0;i<Adof2;i++) out[i]=0.;
-            fem_forces(fzt,in);
+            Kq_multiply(in);
             for(int i=0;i<Adof2;i++) out[i]=-out[i];
         }
     private:
@@ -248,6 +246,7 @@ class mesh_rk4 : public mesh, public rk4 {
         virtual void ff(double t_,double *in,double *out) {mesh_ff(t_,in,out);}
         virtual void init(double *q) {mesh_init();}
         virtual void print_dense(int fr,double t_,double *in) {mesh_print_dense(fr,t_,in);}
+		virtual void print_step() {mesh_print_last_step();}
 };
 
 #endif

@@ -1,4 +1,4 @@
-#include <cstring>
+﻿#include <cstring>
 #include <fstream> //DEBUG
 #include <iostream>//DEBUG
 
@@ -64,7 +64,6 @@ mesh::~mesh() {
 	}
 
 	// FEM terms
-	delete[] M_lump; delete[] P;
 	delete[] C_inv;
 }
 
@@ -109,8 +108,8 @@ void mesh::setup_springs() {
                 *(top++)=*edp;
                 *(top++)=edp[1];
                 *(top++)=edge_lookup(i,*edp);
-				*(top++)=edge_lookup(edp[1],i);
                 *(top++)=edge_lookup(*edp,edp[1]);
+				*(top++)=edge_lookup(edp[1],i);
             }
             edp++;
         }
@@ -122,8 +121,8 @@ void mesh::setup_springs() {
                 *(top++)=*edp;
                 *(top++)=*ed[i];
                 *(top++)=edge_lookup(i,*edp);
+				*(top++)=edge_lookup(*edp,*ed[i]);
 				*(top++)=edge_lookup(*ed[i],i);
-                *(top++)=edge_lookup(*edp,*ed[i]);
             }
         }
         edp++;
@@ -132,9 +131,6 @@ void mesh::setup_springs() {
 	// Build change of bases matrices
 	buildC();
 	printf("Change of bases matrices have been built.\n");
-
-	// Initialize force vector in FEM computations
-	P=new double[Adof2];
 
 	// Build the mass matrix
 	// Use a list of triplets for fast computation
@@ -150,7 +146,7 @@ void mesh::setup_springs() {
 		while(top<to[Ti+1]) { // Loop through triangles
 			// Get coordinates from ref. domain
 			int v[3]={Ti,*top,top[1]}; // Vertices 1,2,3
-			int ed[3]={top[2],top[3],top[4]}; // Edges 1,2,3
+			int ed[3]={top[2],top[4],top[3]}; // Edges 1,2,3
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -173,12 +169,6 @@ void mesh::setup_springs() {
 					j1++;
 				}
 			}
-			/*for (int i=0;i<3;i++) { // TODO - Is this right? M, F, q ordered as they were?
-				// Edges dofs
-				argv[18+i]=6*n+ed[i];
-				// Nodal dofs
-				for (int k=0;k<6;k++) argv[6*i+k]=6*v[i]+k;
-			}*/
 
 			for (int I=0;I<21;I++)
 			for (int J=0;J<21;J++) {
@@ -200,10 +190,10 @@ void mesh::setup_springs() {
 	printf("Sparse mass matrix assembled\n");
 	printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
 
-	//TODO: Delete: BEGIN DEBUG
-	printf("Nonzeros: %ld\n",M_sp.nonZeros());
+	//TODO: Delete (debug)
+	/*printf("Nonzeros: %ld\n",M_sp.nonZeros());
 	printf("Size of M: %d\n",Adof2*Adof2);
-	/*Eigen::MatrixXd M_d(M_sp);
+	Eigen::MatrixXd M_d(M_sp);
 	std::ofstream outputFile("Sparse matrix test 6x6.csv");
 	for (int i=0;i<M_d.rows();i++) {
 		for (int j=0;j<M_d.cols();j++) {
@@ -212,7 +202,6 @@ void mesh::setup_springs() {
 		outputFile << std::endl; 
 	}
 	outputFile.close();*/
-	// END DEBUG
 
 	// Factorize sparse matrix using LLT Cholesky factorization
 	solver.analyzePattern(M_sp);
@@ -222,6 +211,9 @@ void mesh::setup_springs() {
 		exit(1);
 	}
 	printf("Finished sparse matrix factorization.\n");
+
+	// Assemble the global stiffness matrix for FEM computations
+	assemble_K();
 }
 
 int mesh::edge_lookup(int i,int j) {
@@ -358,6 +350,7 @@ void mesh::Gauss_displacement() {
 	for (int Ti=0;Ti<n;Ti++)
 	while (top<to[Ti+1]) {
 		int v[3]={Ti,*top,top[1]};
+		int ed[3]={top[2],top[4],top[3]};
 		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -378,30 +371,21 @@ void mesh::Gauss_displacement() {
 						-vb[3]/l[1], vb[2]/l[1],
 						-vb[5]/l[2], vb[4]/l[2] };
 
-		pts[6*n+top[2]] += -eps*.04*m[0]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[0]
-							-eps*.04*m[1]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[1] ;
-		pts[6*n+top[3]] += -eps*.04*m[2]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[2]
-							-eps*.04*m[3]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[3] ;
-		pts[6*n+top[4]] += -eps*.04*m[4]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[4]
-							-eps*.04*m[5]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[5] ;
+		// TODO - delete
+		/*printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); // TODO - delete (debug)
+		printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
+		printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
+		printf("\n");*/
 
-		// Normal derivatives should cancel?
-		for (int i=2;i<5;i++) if (pts[6*n+top[i]]<1e-16) pts[6*n+top[i]]=0.;
+		pts[6*n+ed[0]] += -eps*.04*m[0]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[0]
+							-eps*.04*m[1]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[1] ;
+		pts[6*n+ed[1]] += -eps*.04*m[2]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[2]
+							-eps*.04*m[3]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[3] ;
+		pts[6*n+ed[2]] += -eps*.04*m[4]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[4]
+							-eps*.04*m[5]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[5] ;
 
 		top+=5;
 	}
-	// TODO - delete
-	/*printf("Nodes\n");
-	for (int i=0;i<n;i++) {
-		for (int k=0;k<6;k++) printf("%g ",pts[6*i+k]);
-		printf("\n");
-	}
-	printf("Edges\n");
-	for (int i=0;i<ns;i++) {
-		printf("%g ",pts[6*n+i]);
-	}
-	printf("\n");*/
-
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -426,18 +410,20 @@ void mesh::print_pts(double *pt_array) {
 	}
 	printf("\n");
 	}
+	printf("Edges\n");
+	for (int i=0;i<ns;i++) printf("%g ",pt_array[i]);
+	printf("\n\n");
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
-	// Add forces coming from finite-element (FEM) computations
-	arr_zeros(P,Adof2);
-	fem_forces(t_,in);
+	// Add biharmonic term from finite-element (FEM) computations
+	Kq_multiply(in);
 
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
-	for (i=0;i<Adof2;i++) f_sum[i] = P[i]-drag*vp[i];
+	for (i=0;i<Adof2;i++) f_sum[i] = Kq[i]-drag*vp[i];
 	// Cholesky direct solver, a = f/m
 	av=solver.solve(f_sum);
 	if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
@@ -530,15 +516,31 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     }
 }*/
 
-/** Computes the finite-elements forces from sheet mechanics.
- * \param[in] t_ the time at which to evaluate the acceleration.
- * \param[in] in the mesh point positions. */
-void mesh::fem_forces(double t_,double *in) {
-    int *top=tom, tri=0;
-    for(int Ti=0;Ti<n;Ti++) {
-        while(top<to[Ti+1]) {
+/** Computes the finite-elements biharmonic from sheet mechanics.
+ * \param[in] in the mesh degrees of freedom. */
+void mesh::Kq_multiply(double *in) {
+	// Copy "in" into Eigen vector
+	// .eval() creates a copy so that "in" is not modified
+	Eigen::VectorXd in_e = Eigen::Map<Eigen::VectorXd>(in, Adof2).eval();
+
+	// Do a matrix-vector product with K
+	Kq = Kd*in_e;
+}
+
+/** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
+*	Checks that the stiffness matrix is positive definite. */
+void mesh::assemble_K() {
+	Kd.resize(Adof2,Adof2);
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	// Get (estimated) memory up front for performance
+	triplets.reserve(6*Adof2);
+
+	int *top=tom, tri=0;
+    for(int Ti=0;Ti<n;Ti++) 
+    while(top<to[Ti+1]) {
 			int v[3]={Ti,*top,top[1]};
-			int ed[3]={top[2],top[3],top[4]};
+			int ed[3]={top[2],top[4],top[3]};
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -564,25 +566,41 @@ void mesh::fem_forces(double t_,double *in) {
 			double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
 				-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
 			
-			for (int J=0;J<21;J++) { // TODO - this is a lot of loops and is super slow. Consolidate? Precompute C_inv*C_inv?
-				double w=0.;
-				for (int I=0;I<21;I++) {
+			for (int I=0;I<21;I++)
+			for (int J=0;J<21;J++) {
 					double HaHb=0.;
 					for (int a=0;a<21;a++)
 					for (int b=0;b<21;b++) {
 						double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
 						for (int r=0;r<3;r++)
 						for (int s=0;s<3;s++)
-							HaHb += The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod;
+							HaHb += The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod; 
 					}
-					double w_i = *(in+argv[I]);
-					w += w_i*HaHb;
-				}
-				P[argv[J]] += prefac*w;
+					triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
 			}
             top+=5; tri+=1;
-        }
     }
+	// Convert triplets list to SparseMatrix.
+	// Contributions in the same (row,col) are summed automatically.
+	Kd.setFromTriplets(triplets.begin(),triplets.end());
+	printf("Stiffness matrix assembled\n");
+	printf("Is the sparse stiffness matrix compressed? %d\n",Kd.isCompressed());
+	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
+	if (llt.info() == Eigen::NumericalIssue) {
+		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
+		exit(1);
+	}
+
+	// TODO: delete (debug)
+	std::ofstream outputFile("Stiffness matrix.csv");
+	Eigen::MatrixXd M_d(Kd);
+	for (int i=0;i<M_d.rows();i++) {
+		for (int j=0;j<M_d.cols();j++) {
+			outputFile << M_d(i,j) << " ";
+		}
+		outputFile << std::endl; 
+	}
+	outputFile.close();
 }
 
 /** Computes the energy.
@@ -598,31 +616,6 @@ double mesh::energy(double t_,double *in) {
     return 0;
 }
 
-// OLD CENTRALIZE()
-/** Centralizes the mesh, and calculates its square width in each of the three
- * coordinate directions.
- * \param[out] (wx,wy,wz) the square widths in the three coordinate directions. */
- /*void mesh::centralize(double &wx,double &wy,double &wz) {
-    double sx=0.,sy=0.,sz=0.,fac=1./static_cast<double>(n);
-
-    // Compute the centroid
-    for(double *p=pts;p<pts+3*n;p+=3) { 
-        sx+=*p;sy+=p[1];sz+=p[2];
-    }
-    sx*=fac;sy*=fac;sz*=fac;
-
-    // Displace the mesh so its centroid is at the origin, and compute the
-    // variance of the vertices in each coordinate
-    wx=wy=wz=0;
-    for(double *p=pts;p<pts+3*n;p+=3) {
-        *p-=sx;p[1]-=sy;p[2]-=sz;
-        wx+=*p*(*p);wy+=p[1]*p[1];wz+=p[2]*p[2];
-    }
-    wx*=fac;wy*=fac;wz*=fac;
-}*/
-
-
-// NEW centralize()
 void mesh::centralize(double &wx,double &wy,double &wz) {
 	// TODO: unsure: I think all z-positions and gradients are zero initially
 	arr_zeros(pts, Adof2);
