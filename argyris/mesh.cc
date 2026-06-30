@@ -64,7 +64,7 @@ mesh::~mesh() {
 	}
 
 	// FEM terms
-	delete[] C_inv;
+	delete[] C_inv; delete[] normals;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -128,11 +128,14 @@ void mesh::setup_springs() {
         edp++;
     }
 
+	// Define the global normal directions
+	global_normals();
+
 	// Build change of bases matrices
 	buildC();
 	printf("Change of bases matrices have been built.\n");
 
-	// Build the mass matrix
+	// Build the mass matrix TODO - put this in a function
 	// Use a list of triplets for fast computation
 	M_sp.resize(Adof2,Adof2);
 	typedef Eigen::Triplet<double> T;
@@ -145,15 +148,40 @@ void mesh::setup_springs() {
 	for(int Ti=0;Ti<n;Ti++) { // Loop through generating indices
 		while(top<to[Ti+1]) { // Loop through triangles
 			// Get coordinates from ref. domain
-			int v[3]={Ti,*top,top[1]}; // Vertices 1,2,3
+			int v[3]={Ti,*top,top[1]};
 			int ed[3]={top[2],top[4],top[3]}; // Edges 1,2,3
 			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-			
+
 			// Reference map Jacobian
 			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
 			double mass = detF*rho;
+
+			// Sides of the triangle
+			double vb[6]={	x2-x1, y2-y1,
+							x3-x1, y3-y1,
+							x3-x2, y3-y2	};
+			// Lengths of each side
+			double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
+							sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
+							sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+			// Normal vectors
+			double na[6]={	-vb[1]/l[0], vb[0]/l[0],
+							-vb[3]/l[1], vb[2]/l[1],
+						-vb[5]/l[2], vb[4]/l[2] };
+			// TODO - delete (debug)
+			/*printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); 
+			printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
+			printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
+			printf("\n");*/
+
+			// Check the local normal direction against global
+			float signs[21];
+			for (int i=0;i<18;i++) signs[i]=1;
+			for (int i=0;i<3;i++) {
+				signs[18+i] = na[2*i]*normals[2*ed[i]]+na[2*i+1]*normals[2*ed[i]+1];
+			}
 
 			int argv[21]; // Global triangle dofs indices
 			int j=3,j1=9,k;
@@ -169,13 +197,13 @@ void mesh::setup_springs() {
 					j1++;
 				}
 			}
-
+	
 			for (int I=0;I<21;I++)
 			for (int J=0;J<21;J++) {
 				double sum=0.;
 				for (int a=0;a<21;a++)
 				for (int b=0;b<21;b++) {
-					sum += C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J]*S[21*a+b];
+					sum += signs[I]*signs[J]*C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J]*S[21*a+b];
 				}
 				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*sum));
 			}
@@ -191,29 +219,71 @@ void mesh::setup_springs() {
 	printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
 
 	//TODO: Delete (debug)
-	/*printf("Nonzeros: %ld\n",M_sp.nonZeros());
+	printf("Nonzeros: %ld\n",M_sp.nonZeros());
 	printf("Size of M: %d\n",Adof2*Adof2);
 	Eigen::MatrixXd M_d(M_sp);
-	std::ofstream outputFile("Sparse matrix test 6x6.csv");
+	std::ofstream outputFile("Mass matrix.csv");
 	for (int i=0;i<M_d.rows();i++) {
 		for (int j=0;j<M_d.cols();j++) {
 			outputFile << M_d(i,j) << " ";
 		}
 		outputFile << std::endl; 
 	}
-	outputFile.close();*/
+	outputFile.close();
 
 	// Factorize sparse matrix using LLT Cholesky factorization
 	solver.analyzePattern(M_sp);
 	solver.factorize(M_sp);
 	if (solver.info()!=Eigen::Success) {
-		printf("Matrix factorization failed\n");
+		printf("Mass matrix factorization failed\n");
 		exit(1);
 	}
-	printf("Finished sparse matrix factorization.\n");
+	printf("Finished mass matrix factorization.\n");
 
 	// Assemble the global stiffness matrix for FEM computations
 	assemble_K();
+}
+
+/** Define the global normal orientations */
+void mesh::global_normals() {
+	normals = new double[2*ns];
+
+	// Keep track of edges which have been seen already
+	int *seen = new int[ns];
+	for (int i=0;i<ns;i++) seen[i]=0;
+
+	int *top=tom;
+	// Loop through triangles
+	for (int Ti=0;Ti<n;Ti++) 
+	while (top<to[Ti+1]) {
+		int ed[3]={top[2],top[4],top[3]};
+		int v[3]={Ti,*top,top[1]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		// Sides of the triangle
+		double vb[6]={	x2-x1, y2-y1,
+						x3-x1, y3-y1,
+						x3-x2, y3-y2	};
+		// Lengths of each side
+		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
+						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
+						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+		// Normal vectors
+		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
+						-vb[3]/l[1], vb[2]/l[1],
+						-vb[5]/l[2], vb[4]/l[2] };
+
+		for (int i=0;i<3;i++) 
+		if (!seen[ed[i]]) {
+			normals[2*ed[i]]=na[2*i];
+			normals[2*ed[i]+1]=na[2*i+1];
+			// Mark this edge as "seen"
+			seen[ed[i]]=1;
+		}
+		top+=5;
+	}
+	delete[] seen;
 }
 
 int mesh::edge_lookup(int i,int j) {
@@ -257,7 +327,7 @@ void mesh::buildC() {
 		double a[6]={ vb[2]/l2[0], vb[3]/l2[0],
 					-vb[0]/l2[1], -vb[1]/l2[1],
 			-(vb[0]+vb[2])/(sqrt(2)*l2[2]), -(vb[1]+vb[3])/(sqrt(2)*l2[2]) };
-		// Normal vectors
+		// Normal vectors 
 		double Rv[6]={	-vb[1], vb[0],
 						-vb[3], vb[2],
 						-vb[5], vb[4]	};
@@ -339,11 +409,15 @@ void mesh::Gauss_displacement() {
 		// First derivatives
 		pts[6*i+1]+=-eps*.04*x*power;
 		pts[6*i+2]+=-eps*.04*y*power;
-		// Second derivativs
+		// Second derivatives
 		pts[6*i+3]+=eps*(-.04 + eps*.08*x*x)*power;
 		pts[6*i+4]+=eps*eps*.08*x*y*power;
 		pts[6*i+5]+=eps*(-.04 + eps*.08*y*y)*power;
 	}
+
+	// Keep track of edges which have been seen already
+	int *seen = new int[ns];
+	for (int i=0;i<ns;i++) seen[i]=0;
 
 	// Initialize normal derivatives
 	int *top=tom;
@@ -371,19 +445,70 @@ void mesh::Gauss_displacement() {
 						-vb[3]/l[1], vb[2]/l[1],
 						-vb[5]/l[2], vb[4]/l[2] };
 
-		// TODO - delete
+		int j=0;
+		for (int i=0;i<3;i++) {
+			if (!seen[ed[i]]) {
+				pts[6*n+ed[i]] += -eps*.04*exp(-eps*(m[j]*m[j]+m[j+1]*m[j+1]))*(m[j]*na[j]+m[j+1]*na[j+1]);
+				seen[ed[i]]=1;
+			}
+			j+=2;
+		}
+		top+=5;
+	}
+}
+
+void mesh::linear_gradient() {
+	// Slope of the gradient
+	const double eps=1;
+	// Initialize function values and gradients at all nodes
+	for(int i=0;i<n;i++) {
+		double x=xyz[3*i], y=xyz[3*i+1];
+		// Displace the z-component
+		pts[6*i]+=eps*(x+y);
+		// First derivatives
+		pts[6*i+1]+=eps;
+		pts[6*i+2]+=eps;
+	}
+
+	// Keep track of edges which have been seen already
+	int *seen = new int[ns];
+	for (int i=0;i<ns;i++) seen[i]=0;
+
+	// Initialize normal derivatives
+	int *top=tom;
+	for (int Ti=0;Ti<n;Ti++)
+	while (top<to[Ti+1]) {
+		int v[3]={Ti,*top,top[1]};
+		int ed[3]={top[2],top[4],top[3]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		// Sides of the triangle
+		double vb[6]={	x2-x1, y2-y1,
+						x3-x1, y3-y1,
+						x3-x2, y3-y2	};
+		// Lengths of each side
+		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
+						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
+						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+		// Normal vectors
+		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
+						-vb[3]/l[1], vb[2]/l[1],
+						-vb[5]/l[2], vb[4]/l[2] };
+
 		/*printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); // TODO - delete (debug)
 		printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
 		printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
 		printf("\n");*/
 
-		pts[6*n+ed[0]] += -eps*.04*m[0]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[0]
-							-eps*.04*m[1]*exp(-eps*(m[0]*m[0]+m[1]*m[1]))*na[1] ;
-		pts[6*n+ed[1]] += -eps*.04*m[2]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[2]
-							-eps*.04*m[3]*exp(-eps*(m[2]*m[2]+m[3]*m[3]))*na[3] ;
-		pts[6*n+ed[2]] += -eps*.04*m[4]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[4]
-							-eps*.04*m[5]*exp(-eps*(m[4]*m[4]+m[5]*m[5]))*na[5] ;
-
+		int j=0;
+		for (int i=0;i<3;i++) {
+			if (!seen[ed[i]]) {
+				pts[6*n+ed[i]] += eps*(na[j]+na[j+1]);
+				seen[ed[i]]=1;
+			}
+			j+=2;
+		}
 		top+=5;
 	}
 }
@@ -539,52 +664,69 @@ void mesh::assemble_K() {
 	int *top=tom, tri=0;
     for(int Ti=0;Ti<n;Ti++) 
     while(top<to[Ti+1]) {
-			int v[3]={Ti,*top,top[1]};
-			int ed[3]={top[2],top[4],top[3]};
-			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-			double B[4]={x2-x1,x3-x1,y2-y1,y3-y1};
-			double detF=B[0]*B[3]-B[1]*B[2];
-			double fac=1/(detF*detF);
-			double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
+		int v[3]={Ti,*top,top[1]};
+		int ed[3]={top[2],top[4],top[3]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		// Sides of the triangle
+		double vb[6]={	x2-x1, y2-y1,
+						x3-x1, y3-y1,
+						x3-x2, y3-y2	};
+		// Lengths of each side
+		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
+						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
+						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+		// Normal vectors
+		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
+						-vb[3]/l[1], vb[2]/l[1],
+						-vb[5]/l[2], vb[4]/l[2] };
+		double B[4]={x2-x1,x3-x1,y2-y1,y3-y1};
+		double detF=B[0]*B[3]-B[1]*B[2];
+		double fac=1/(detF*detF);
+		double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
 
-			int argv[21]; // Global triangle dofs indices
-			int j=3,j1=9,k;
-			for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
-			for (int i=0;i<3;i++) {
-				argv[18+i]=6*n+ed[i]; // Normal derivatives
-				for (k=1;k<3;k++) {
-					argv[j]=6*v[i]+k; // First derivatives
-					j++;
-				}
-				for (k=3;k<6;k++) { // Second derivatives
-					argv[j1]=6*v[i]+k;
-					j1++;
-				}
+		int argv[21]; // Global triangle dofs indices
+		int j=3,j1=9,k;
+		for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
+		for (int i=0;i<3;i++) {
+			argv[18+i]=6*n+ed[i]; // Normal derivatives
+			for (k=1;k<3;k++) {
+				argv[j]=6*v[i]+k; // First derivatives
+				j++;
 			}
-			double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
-				-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
+			for (k=3;k<6;k++) { // Second derivatives
+				argv[j1]=6*v[i]+k;
+				j1++;
+			}
+		}
+
+		float signs[21];
+		for (int i=0;i<18;i++) signs[i]=1;
+		for (int i=0;i<3;i++)
+			signs[18+i] = na[2*i]*normals[2*ed[i]]+na[2*i+1]*normals[2*ed[i]+1];
+
+		double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
+			-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
 			
-			for (int I=0;I<21;I++)
-			for (int J=0;J<21;J++) {
-					double HaHb=0.;
-					for (int a=0;a<21;a++)
-					for (int b=0;b<21;b++) {
-						double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
-						for (int r=0;r<3;r++)
-						for (int s=0;s<3;s++)
-							HaHb += The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod; 
-					}
-					triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
-			}
-            top+=5; tri+=1;
+		for (int I=0;I<21;I++)
+		for (int J=0;J<21;J++) {
+				double HaHb=0.;
+				for (int a=0;a<21;a++)
+				for (int b=0;b<21;b++) {
+					double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
+					for (int r=0;r<3;r++)
+					for (int s=0;s<3;s++)
+						HaHb += signs[a]*signs[b]*The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod; 
+				}
+				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
+		}
+        top+=5; tri+=1;
     }
 	// Convert triplets list to SparseMatrix.
 	// Contributions in the same (row,col) are summed automatically.
 	Kd.setFromTriplets(triplets.begin(),triplets.end());
 	printf("Stiffness matrix assembled\n");
-	printf("Is the sparse stiffness matrix compressed? %d\n",Kd.isCompressed());
 	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
 	if (llt.info() == Eigen::NumericalIssue) {
 		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
@@ -617,7 +759,6 @@ double mesh::energy(double t_,double *in) {
 }
 
 void mesh::centralize(double &wx,double &wy,double &wz) {
-	// TODO: unsure: I think all z-positions and gradients are zero initially
 	arr_zeros(pts, Adof2);
 
     double sx=0.,sy=0.,sz=0.,fac=1./static_cast<double>(n);

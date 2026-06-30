@@ -99,6 +99,8 @@ class mesh : public mesh_param {
 		double *C_inv;
 		/** Argyris stiffness matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> Kd;
+		/** Global normal vectors to edges */
+		double *normals;
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -132,7 +134,9 @@ class mesh : public mesh_param {
 		void Kq_multiply(double* in);
 		void buildC();
 		void Gauss_displacement();
+		void linear_gradient();
 		void assemble_K();
+		void global_normals();
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);
