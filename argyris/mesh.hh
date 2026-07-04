@@ -95,8 +95,8 @@ class mesh : public mesh_param {
 		int Adof;
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
-		/** Argyris change of bases matrix inverse */
-		double *C_inv;
+		/** Argyris change of bases matrix */
+		double *C_glob;
 		/** Argyris stiffness matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> Kd;
 		/** Global normal vectors to edges */
@@ -135,6 +135,7 @@ class mesh : public mesh_param {
 		void buildC();
 		void Gauss_displacement();
 		void linear_gradient();
+		void const_pert();
 		void assemble_K();
 		void global_normals();
 

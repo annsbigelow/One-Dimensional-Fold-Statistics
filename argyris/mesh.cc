@@ -64,7 +64,7 @@ mesh::~mesh() {
 	}
 
 	// FEM terms
-	delete[] C_inv; delete[] normals;
+	delete[] normals; delete[] C_glob;
 }
 
 /** Sets up the spring network table and initializes the spring rest lengths to
@@ -171,10 +171,10 @@ void mesh::setup_springs() {
 							-vb[3]/l[1], vb[2]/l[1],
 						-vb[5]/l[2], vb[4]/l[2] };
 			// TODO - delete (debug)
-			/*printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); 
-			printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
-			printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
-			printf("\n");*/
+			//printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); 
+			//printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
+			//printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
+			//printf("\n");
 
 			// Check the local normal direction against global
 			float signs[21];
@@ -203,7 +203,8 @@ void mesh::setup_springs() {
 				double sum=0.;
 				for (int a=0;a<21;a++)
 				for (int b=0;b<21;b++) {
-					sum += signs[I]*signs[J]*C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J]*S[21*a+b];
+					//sum += C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J]*S[21*a+b];
+					sum += signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J]*S[21*a+b];
 				}
 				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*sum));
 			}
@@ -297,7 +298,7 @@ int mesh::edge_lookup(int i,int j) {
 
 // Build change of bases matrices for each triangle
 void mesh::buildC() {
-	C_inv=new double[ntri*441];
+	C_glob = new double[ntri*441];
 
 	int *top=tom;
 	double D[504], E[504];
@@ -375,25 +376,12 @@ void mesh::buildC() {
 		// Multiply D and E to make C
 		double C[441];
 		arr_zeros(C,441);
-		for (i=0;i<21;i++)
-		for (j=0;j<21;j++)
+		for (i=0;i<21;i++) 
+		for (j=0;j<21;j++) 
 		for (int k=0;k<24;k++)
 			C[21*i+j] += D[24*i+k]*E[21*k+j];
 
-		// Invert C using Eigen
-		Eigen::Map<Eigen::Matrix<double,21,21,Eigen::RowMajor> > C_eig(C);
-		Eigen::FullPivLU<Eigen::Matrix<double,21,21,Eigen::RowMajor> > lu(C_eig);
-		if (!lu.isInvertible()) {
-			printf("Error: Change of bases matrix is not invertible.\n");
-			exit(1);
-		}
-		Eigen::Matrix<double,21,21,Eigen::RowMajor> Ce_inv = C_eig.inverse();
-		double C_loc_inv[441];
-		std::memcpy(C_loc_inv, Ce_inv.data(), 441*sizeof(double));
-
-		// Copy local change of basis matrix into global C_inv table
-		for (int i=0;i<441;i++) C_inv[441*tri+i]=C_loc_inv[i];
-
+		for (int i=0;i<441;i++) C_glob[441*tri+i]=C[i];
 		top+=5; tri+=1;
 	}
 }
@@ -511,6 +499,10 @@ void mesh::linear_gradient() {
 		}
 		top+=5;
 	}
+}
+
+void mesh::const_pert() {
+	for (int i=0;i<n;i++) pts[6*i]+=1;
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -709,17 +701,18 @@ void mesh::assemble_K() {
 		double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
 			-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
 			
-		for (int I=0;I<21;I++)
+		for (int I=0;I<21;I++) 
 		for (int J=0;J<21;J++) {
 				double HaHb=0.;
 				for (int a=0;a<21;a++)
 				for (int b=0;b<21;b++) {
-					double C_prod = C_inv[441*tri+21*a+I]*C_inv[441*tri+21*b+J];
+					//double C_prod = C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
+					double C_prod = signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
 					for (int r=0;r<3;r++)
 					for (int s=0;s<3;s++)
-						HaHb += signs[a]*signs[b]*The[r]*The[s]*F[9*(21*a+b)+3*r+s]*C_prod; 
+						HaHb += C_prod*The[r]*The[s]*F[9*(21*a+b)+3*r+s];
 				}
-				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
+				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb)); 
 		}
         top+=5; tri+=1;
     }
@@ -727,11 +720,6 @@ void mesh::assemble_K() {
 	// Contributions in the same (row,col) are summed automatically.
 	Kd.setFromTriplets(triplets.begin(),triplets.end());
 	printf("Stiffness matrix assembled\n");
-	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
-	if (llt.info() == Eigen::NumericalIssue) {
-		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
-		exit(1);
-	}
 
 	// TODO: delete (debug)
 	std::ofstream outputFile("Stiffness matrix.csv");
@@ -739,10 +727,19 @@ void mesh::assemble_K() {
 	for (int i=0;i<M_d.rows();i++) {
 		for (int j=0;j<M_d.cols();j++) {
 			outputFile << M_d(i,j) << " ";
+			double diff = abs(M_d(i,j)-M_d(j,i));
+			if (diff > 1e-13)
+				printf("Stiffness symmetry break. diff=%g\n", diff);
 		}
 		outputFile << std::endl; 
 	}
 	outputFile.close();
+
+	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
+	if (llt.info() == Eigen::NumericalIssue) {
+		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
+		//exit(1);
+	}
 }
 
 /** Computes the energy.
