@@ -15,21 +15,17 @@ int main() {
 	double wx, wy, wz;
 	mp.centralize(wx, wy, wz);
 
-	mp.PCG = false; 
-	mp.CG = false;
-	double start_time = omp_get_wtime();
-	mp.setup_springs();
-	printf("Triangle table and mass matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
-
-	// Apply perturbation in z-direction
-	// Add Gaussian displacement around the central location
-	// including the gradient values!
-	mp.Gauss_displacement();
-
 	// Setup the output directory and allocate memory for integrator.
 	mp.setup_output_dir("Argyris_Test.odr");
+	double start_time = omp_get_wtime();
+	mp.setup_springs();
+	printf("Mass matrix and stiffness matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
+
+	// Apply perturbation in z-direction
+	mp.linear_gradient();
 
 	// Solve!
-	mp.solve_adaptive(1, 1e-4, 1e-4, false, 1);
+	mp.solve_fixed(1e-2, 2, true);
+	//mp.solve_adaptive(1, 1e-4, 1e-4, false, 1);
 	printf("Elapsed solution time: %g seconds\n", omp_get_wtime() - start_time);
 }

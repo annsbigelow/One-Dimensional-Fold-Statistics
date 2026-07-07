@@ -81,14 +81,10 @@ class mesh : public mesh_param {
         int **to;
         /** Memory for the triangular elements of the mesh. */
         int *tom;
-		/** FEM bool: whether to use conjugate gradient instead of sparse direct solver */
-		bool CG;
-		/** FEM bool: whether to use incomplete Cholesky as a CG preconditioner. */
-		bool PCG;
 		/** FEM Sparse mass matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
 		/** FEM Mass matrix Sparse Cholesky solver */
-		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > solver;
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > Msolver;
 		/** FEM Biharmonic term */
 		Eigen::VectorXd Kq;
 		/** Argyris degrees of freedom */
@@ -128,7 +124,7 @@ class mesh : public mesh_param {
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
-		/** FEM Helper Functions */
+		/** FEM Functions */
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		void Kq_multiply(double* in);
@@ -137,7 +133,12 @@ class mesh : public mesh_param {
 		void linear_gradient();
 		void const_pert();
 		void assemble_K();
+		void assemble_M();
 		void global_normals();
+		void get_argv(int* argv, int v[3], int ed[3]);
+		void local_Kq_multiply(int tri, int Ti);
+		void setup_fem_matrices();
+		void tri_geo(int v[3], double* vb, double* l, double* na);
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);

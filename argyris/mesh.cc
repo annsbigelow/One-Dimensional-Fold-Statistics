@@ -67,9 +67,7 @@ mesh::~mesh() {
 	delete[] normals; delete[] C_glob;
 }
 
-/** Sets up the spring network table and initializes the spring rest lengths to
- * be fully relaxed. Sets up the boundaries of the subsheet, if applicable.
- */
+/** Sets up the spring network table and build FEM matrices. */
 void mesh::setup_springs() {
     // Scan the triangle table, and store an edge (i,j) if i<j to ensure that
     // only one copy of each is kept
@@ -128,6 +126,20 @@ void mesh::setup_springs() {
         edp++;
     }
 
+	setup_fem_matrices();
+}
+
+int mesh::edge_lookup(int i,int j) {
+    if(i>j) {int k=j;j=i;i=k;}
+    for(int *eop=eo[i];eop<eo[i+1];eop++) {
+        if(*eop==j) return int(eop-eom);
+    }
+    fputs("Can't find edge index\n",stderr);
+    exit(1);
+}
+
+/** Build the FEM change of bases, mass, and stiffness matrices. */
+void mesh::setup_fem_matrices() {
 	// Define the global normal directions
 	global_normals();
 
@@ -135,47 +147,30 @@ void mesh::setup_springs() {
 	buildC();
 	printf("Change of bases matrices have been built.\n");
 
-	// Build the mass matrix TODO - put this in a function
-	// Use a list of triplets for fast computation
-	M_sp.resize(Adof2,Adof2);
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	// Get (estimated) memory up front for performance
-	triplets.reserve(6*Adof2);
+	// Build the mass matrix and global stiffness matrix
+	assemble_M();
+	assemble_K();
+}
 
-	top=tom; 
-	int tri=0;
+void mesh::assemble_M() {
+	M_sp.resize(Adof2,Adof2);
+	typedef Eigen::Triplet<double> T; // Use a list of triplets for fast computation
+	std::vector<T> triplets;
+	triplets.reserve(6*Adof2); // Get (estimated) memory up front for performance
+
+	int *top=tom, tri=0, argv[21];
+	double vb[6], l[3], na[6];
 	for(int Ti=0;Ti<n;Ti++) { // Loop through generating indices
 		while(top<to[Ti+1]) { // Loop through triangles
-			// Get coordinates from ref. domain
+			// Get coordinates from reference domain
 			int v[3]={Ti,*top,top[1]};
 			int ed[3]={top[2],top[4],top[3]}; // Edges 1,2,3
-			double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+			tri_geo(v,vb,l,na);
 
 			// Reference map Jacobian
-			double detF=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+			double detF=vb[0]*vb[3]-vb[2]*vb[1];
 			double mass = detF*rho;
-
-			// Sides of the triangle
-			double vb[6]={	x2-x1, y2-y1,
-							x3-x1, y3-y1,
-							x3-x2, y3-y2	};
-			// Lengths of each side
-			double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
-							sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
-							sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
-			// Normal vectors
-			double na[6]={	-vb[1]/l[0], vb[0]/l[0],
-							-vb[3]/l[1], vb[2]/l[1],
-						-vb[5]/l[2], vb[4]/l[2] };
-			// TODO - delete (debug)
-			//printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); 
-			//printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
-			//printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
-			//printf("\n");
-
+			
 			// Check the local normal direction against global
 			float signs[21];
 			for (int i=0;i<18;i++) signs[i]=1;
@@ -183,20 +178,7 @@ void mesh::setup_springs() {
 				signs[18+i] = na[2*i]*normals[2*ed[i]]+na[2*i+1]*normals[2*ed[i]+1];
 			}
 
-			int argv[21]; // Global triangle dofs indices
-			int j=3,j1=9,k;
-			for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
-			for (int i=0;i<3;i++) {
-				argv[18+i]=6*n+ed[i]; // Normal derivatives
-				for (k=1;k<3;k++) {
-					argv[j]=6*v[i]+k; // First derivatives
-					j++;
-				}
-				for (k=3;k<6;k++) { // Second derivatives
-					argv[j1]=6*v[i]+k;
-					j1++;
-				}
-			}
+			get_argv(argv,v,ed);
 	
 			for (int I=0;I<21;I++)
 			for (int J=0;J<21;J++) {
@@ -216,12 +198,9 @@ void mesh::setup_springs() {
 	// Convert triplets list to SparseMatrix.
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
-	printf("Sparse mass matrix assembled\n");
-	printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
+	//printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
 
-	//TODO: Delete (debug)
-	printf("Nonzeros: %ld\n",M_sp.nonZeros());
-	printf("Size of M: %d\n",Adof2*Adof2);
+	// Debug
 	Eigen::MatrixXd M_d(M_sp);
 	std::ofstream outputFile("Mass matrix.csv");
 	for (int i=0;i<M_d.rows();i++) {
@@ -233,16 +212,13 @@ void mesh::setup_springs() {
 	outputFile.close();
 
 	// Factorize sparse matrix using LLT Cholesky factorization
-	solver.analyzePattern(M_sp);
-	solver.factorize(M_sp);
-	if (solver.info()!=Eigen::Success) {
+	Msolver.analyzePattern(M_sp);
+	Msolver.factorize(M_sp);
+	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
 	}
-	printf("Finished mass matrix factorization.\n");
-
-	// Assemble the global stiffness matrix for FEM computations
-	assemble_K();
+	printf("Mass matrix factorization finished.\n");
 }
 
 /** Define the global normal orientations */
@@ -254,26 +230,13 @@ void mesh::global_normals() {
 	for (int i=0;i<ns;i++) seen[i]=0;
 
 	int *top=tom;
+	double vb[6], l[3], na[6];
 	// Loop through triangles
 	for (int Ti=0;Ti<n;Ti++) 
 	while (top<to[Ti+1]) {
 		int ed[3]={top[2],top[4],top[3]};
 		int v[3]={Ti,*top,top[1]};
-		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	};
-		// Lengths of each side
-		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
-						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
-						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
-		// Normal vectors
-		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
-						-vb[3]/l[1], vb[2]/l[1],
-						-vb[5]/l[2], vb[4]/l[2] };
+		tri_geo(v, vb, l, na);
 
 		for (int i=0;i<3;i++) 
 		if (!seen[ed[i]]) {
@@ -287,13 +250,31 @@ void mesh::global_normals() {
 	delete[] seen;
 }
 
-int mesh::edge_lookup(int i,int j) {
-    if(i>j) {int k=j;j=i;i=k;}
-    for(int *eop=eo[i];eop<eo[i+1];eop++) {
-        if(*eop==j) return int(eop-eom);
-    }
-    fputs("Can't find edge index\n",stderr);
-    exit(1);
+/** Collects geometry for a given triangle.
+*	\param[in] v the indices for the vertices of the triangle.
+*	\return vb the vectors defining the sides of the triangle.
+*	\return l the lengths of each side.
+*	\return na the normal vectors at each side, found by rotating each
+*		element of vb by pi/2.
+*/
+void mesh::tri_geo(int v[3], double* vb, double* l, double* na) {
+	double  *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+			*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+			*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+	// Sides of the triangle
+	vb[0]=x2-x1; vb[1]=y2-y1;
+	vb[2]=x3-x1; vb[3]=y3-y1;
+	vb[4]=x3-x2; vb[5]=y3-y2;
+
+	// Lengths of each side
+	l[0]=sqrt(vb[0]*vb[0]+vb[1]*vb[1]);
+	l[1]=sqrt(vb[2]*vb[2]+vb[3]*vb[3]);
+	l[2]=sqrt(vb[4]*vb[4]+vb[5]*vb[5]);
+
+	// Normal vectors
+	na[0]=-vb[1]/l[0]; na[1]=vb[0]/l[0];
+	na[2]=-vb[3]/l[1]; na[3]=vb[2]/l[1];
+	na[4]=-vb[5]/l[2]; na[5]=vb[4]/l[2];
 }
 
 // Build change of bases matrices for each triangle
@@ -303,35 +284,32 @@ void mesh::buildC() {
 	int *top=tom;
 	double D[504], E[504];
 	int tri=0,i,j;
+	double vb[6], l[3], na[6];
 	for (int Ti=0;Ti<n;Ti++) // Loop through triangles
 	while (top<to[Ti+1]) {
 		// Vertices 1,2,3
 		int v[3]={Ti,*top,top[1]};
-		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	}; 
+		tri_geo(v,vb,l,na);
+		// Lengths of each side, squared 
+		double l2[3];
+		for (i=0;i<3;i++) l2[i]=l[i]*l[i];
 		// Affine transformation Jacobian
 		double B[4]={ vb[0],vb[2], vb[1],vb[3] };
 		// Hessian
 		double H[9]={	B[0]*B[0], 2*B[0]*B[2], B[2]*B[2],
 						B[1]*B[0], B[1]*B[2]+B[0]*B[3], B[2]*B[3],
 						B[1]*B[1], 2*B[3]*B[1], B[3]*B[3]	};
-		// Lengths of each side, squared 
-		double l2[3]={	vb[0]*vb[0]+vb[1]*vb[1],
-						vb[2]*vb[2]+vb[3]*vb[3],
-						vb[4]*vb[4]+vb[5]*vb[5]	};
-		// Build the change of bases for the normal derivatives
+		// Normal vectors (un-normalized)
+		double Rv[6];
+		for (i=0;i<3;i++) {
+			Rv[2*i]=na[2*i]*l[i];
+			Rv[2*i+1]=na[2*i+1]*l[i];
+		}
+		// Change of bases for the normal derivatives
 		double a[6]={ vb[2]/l2[0], vb[3]/l2[0],
 					-vb[0]/l2[1], -vb[1]/l2[1],
 			-(vb[0]+vb[2])/(sqrt(2)*l2[2]), -(vb[1]+vb[3])/(sqrt(2)*l2[2]) };
-		// Normal vectors 
-		double Rv[6]={	-vb[1], vb[0],
-						-vb[3], vb[2],
-						-vb[5], vb[4]	};
+
 		double f[3], g[3];
 		for (i=0;i<3;i++) {
 			f[i] = a[2*i]*Rv[2*i] + a[2*i+1]*Rv[2*i+1];
@@ -387,7 +365,7 @@ void mesh::buildC() {
 }
 
 void mesh::Gauss_displacement() {
-	const double eps=0.1;
+	const double eps=0.001;
 	// Initialize function values and gradients at all nodes
 	for(int i=0;i<n;i++) {
 		double x=xyz[3*i], y=xyz[3*i+1];
@@ -447,7 +425,7 @@ void mesh::Gauss_displacement() {
 
 void mesh::linear_gradient() {
 	// Slope of the gradient
-	const double eps=1;
+	const double eps=.001;
 	// Initialize function values and gradients at all nodes
 	for(int i=0;i<n;i++) {
 		double x=xyz[3*i], y=xyz[3*i+1];
@@ -464,30 +442,12 @@ void mesh::linear_gradient() {
 
 	// Initialize normal derivatives
 	int *top=tom;
+	double vb[6], l[3], na[6];
 	for (int Ti=0;Ti<n;Ti++)
 	while (top<to[Ti+1]) {
 		int v[3]={Ti,*top,top[1]};
 		int ed[3]={top[2],top[4],top[3]};
-		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	};
-		// Lengths of each side
-		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
-						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
-						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
-		// Normal vectors
-		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
-						-vb[3]/l[1], vb[2]/l[1],
-						-vb[5]/l[2], vb[4]/l[2] };
-
-		/*printf("(%d %d %d)=((%g %g) (%g %g) (%g %g))\n", v[0],v[1],v[2],x1,y1,x2,y2,x3,y3); // TODO - delete (debug)
-		printf("Normals (%g %g) (%g %g) (%g %g)\n", na[0],na[1],na[2],na[3],na[4],na[5]);
-		printf("Normals idx =(%d %d %d)\n", ed[0],ed[1],ed[2]);
-		printf("\n");*/
+		tri_geo(v,vb,l,na);
 
 		int j=0;
 		for (int i=0;i<3;i++) {
@@ -502,7 +462,8 @@ void mesh::linear_gradient() {
 }
 
 void mesh::const_pert() {
-	for (int i=0;i<n;i++) pts[6*i]+=1;
+	const float eps = .001;
+	for (int i=0;i<n;i++) pts[6*i]+=eps;
 }
 
 void mesh::arr_zeros(double *A,int size) {
@@ -528,120 +489,108 @@ void mesh::print_pts(double *pt_array) {
 	printf("\n");
 	}
 	printf("Edges\n");
-	for (int i=0;i<ns;i++) printf("%g ",pt_array[i]);
+	for (int i=0;i<ns;i++) printf("%g ",pt_array[6*n+i]);
 	printf("\n\n");
 }
 
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
-	// Add biharmonic term from finite-element (FEM) computations
+	// Add biharmonic term from FEM computations
 	Kq_multiply(in);
 
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
-	for (i=0;i<Adof2;i++) f_sum[i] = Kq[i]-drag*vp[i];
-	// Cholesky direct solver, a = f/m
-	av=solver.solve(f_sum);
-	if (solver.info()!=Eigen::Success) printf("Matrix solving failed\n");
+	for (i=0;i<Adof2;i++)
+		f_sum[i] = Kq[i]-drag*vp[i];
+	// Cholesky direct solver, a = M^-1*f
+	av=Msolver.solve(f_sum);
+	if (Msolver.info()!=Eigen::Success) printf("Matrix solving failed\n");
 	std::memcpy(acc,av.data(),Adof2*sizeof(double));
 
-    // Assemble the velocities in the first part of the out array. In addition,
-    // zero out the forces for nodes on the boundary, if required.
-    if(fix_boundary) {
-        for(i=0;i<n;i++)
-		for(int k=0;k<6;k++){
-            if(ncn[i]&bflag) {
-                out[6*i+k]=0;
-                acc[6*i+k]=0;
-            } else out[6*i+k]=in[Adof2+6*i+k];
-        }
-		// Edge dofs
-		for(i=0;i<ns;i++) {
-			if(ncn[i]&bflag) { // TODO - this is wrong. ncn has n elements. Loop through triangles.
-				out[6*n+i]=0; acc[6*n+i]=0;
-			} else out[6*n+i]=in[Adof2+6*n+i];
+	// Debug: Calculate the residual
+	Eigen::MatrixXd M_d(M_sp);
+	for (int i=0;i<Adof2;i++) {
+		double Mx = 0.;
+		for (int j=0;j<Adof2;j++) {
+			Mx += M_d(i,j)*acc[j];
 		}
-    } else {
-		for(i=0;i<n;i++)
-		for(int k=0;k<6;k++) {
-        out[6*i+k]=in[Adof2+6*i+k];
-		}
-		// Edge dofs
-		for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
+		double residual = Mx-f_sum[i];
+		printf("Residual: %g\n",residual);
 	}
+	printf("\n");
+
+    // Assemble the velocities in the first part of the out array. 
+	for(i=0;i<n;i++)
+		for(int k=0;k<6;k++) {
+			out[6*i+k]=in[Adof2+6*i+k];
+		}
+	for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
 }
 
-/** Adds in the contact forces between nodes in the mesh.
- * \param[in] in the mesh point positions.
- * \param[in] out the mesh point accelerations (cumulative). */
-/*void mesh::contact_forces(double *in,double *out) {
-    double *acc=out+3*n,K=100;
-    const double diamsq=diam*diam,
-                 screen=6,screensq=screen*screen;
-
-    // Build the proximity grid data structure
-    pg.setup(in,n);
-    pg.populate(in,n);
-
-    // Loop over all of the balls in the simulation
-    for(int i=0;i<n;i++) {
-
-        // Determine the grid subregion that could possibly interact with this
-        // ball
-        int li,ui,lj,uj,lk,uk;
-        pg.subregion(in+3*i,diam,li,ui,lj,uj,lk,uk);
-
-        for(int ck=lk;ck<=uk;ck++) for(int cj=lj;cj<=uj;cj++) {
-            for(int ci=li;ci<=ui;ci++) {
-                int ijk=ci+pg.m*(cj+pg.n*ck);
-
-                // Loop over all mesh points in this block
-                point_info *pip=pg.p[ijk],*pie=pip+pg.co[ijk];
-                for(;pip<pie;pip++) if(pip->id>i) {
-                    double dx=pip->x-in[3*i],dy=pip->y-in[3*i+1],dz=pip->z-in[3*i+2],
-                           rsq=dx*dx+dy*dy+dz*dz;
-
-                    // If the mesh point is in contact then compute the acceleration
-                    // contribution
-                    if(rsq<diamsq) {
-
-                        // Rule out nearby points on the mesh using initial positions
-                        int i2=pip->id;
-                        double *q=sh_pts+3*i,
-                               *r=sh_pts+3*i2,
-                               ex=q[0]-r[0],
-                               ey=q[1]-r[1],
-                               ez=q[2]-r[2];
-
-                        // If the points are far away from each other in the
-                        // mesh coordinates, then apply a contact force
-                        if(ex*ex+ey*ey+ez*ez>screensq) {
-                            double fac=K*(1-diam/sqrt(rsq));
-                            dx*=fac;dy*=fac;dz*=fac;
-                            acc[3*i]+=dx;
-                            acc[3*i+1]+=dy;
-                            acc[3*i+2]+=dz;
-                            acc[3*i2]-=dx;
-                            acc[3*i2+1]-=dy;
-                            acc[3*i2+2]-=dz;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}*/
-
-/** Computes the finite-elements biharmonic from sheet mechanics.
+/** Computes the biharmonic term from sheet mechanics.
  * \param[in] in the mesh degrees of freedom. */
 void mesh::Kq_multiply(double *in) {
 	// Copy "in" into Eigen vector
 	// .eval() creates a copy so that "in" is not modified
 	Eigen::VectorXd in_e = Eigen::Map<Eigen::VectorXd>(in, Adof2).eval();
+	Kq.setZero();
 
 	// Do a matrix-vector product with K
+	//printf("Before multiply:\n"); // Debug
+	//print_pts(in);
 	Kq = Kd*in_e;
+	/*double *tmp = new double[Adof2]; // Debug
+	std::memcpy(tmp,Kq.data(),Adof2*sizeof(double));
+	printf("Kq:\n");
+	print_pts(tmp);
+	delete[] tmp;*/
+}
+
+/** Test a multiplication by a local stiffness matrix on one triangle. 
+*	\param[in] tri the triangle to test 
+	\param[in] Ti the generating node of the triangle. */
+void mesh::local_Kq_multiply(int tri, int Ti) {
+	Eigen::MatrixXd K_dense(Kd);
+
+	int *top = tom + 5*tri;
+	int v[3] = {Ti, top[0],top[1]};
+	int ed[3] = {top[2],top[4],top[3]};
+	int argv[21];
+	get_argv(argv,v,ed);
+
+	double loc_Kq[21];
+	printf("local multiply:\n");
+	for (int I=0;I<21;I++) {
+		loc_Kq[I]=0.;
+		for (int J=0;J<21;J++) {
+			if (argv[I]==11) {
+				//printf("K val: %g, pts val: %g, test: %g\n",K_dense(argv[I],argv[J]),pts[argv[J]],K_dense(argv[I],argv[J])*pts[argv[J]]);
+			}
+			loc_Kq[I] += K_dense(argv[I],argv[J])*pts[argv[J]];
+		}
+		printf("index: %d, val: %g\n",argv[I],loc_Kq[I]);
+	}
+}
+
+/** Get the global indices for a given triangle.
+*	\param[in] v the vertices of the triangle.
+	\param[in] ed the edges of the triangle. 
+	\return argv the global indexing. */
+void mesh::get_argv(int* argv, int v[3], int ed[3]) {
+	int j=3,j1=9,k;
+	for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
+	for (int i=0;i<3;i++) {
+		argv[18+i]=6*n+ed[i]; // Normal derivatives
+		for (k=1;k<3;k++) {
+			argv[j]=6*v[i]+k; // First derivatives
+			j++;
+		}
+		for (k=3;k<6;k++) { // Second derivatives
+			argv[j1]=6*v[i]+k;
+			j1++;
+		}
+	}
 }
 
 /** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
@@ -653,45 +602,19 @@ void mesh::assemble_K() {
 	// Get (estimated) memory up front for performance
 	triplets.reserve(6*Adof2);
 
-	int *top=tom, tri=0;
+	int *top=tom, tri=0, argv[21];
+	double vb[6],l[3],na[6];
     for(int Ti=0;Ti<n;Ti++) 
     while(top<to[Ti+1]) {
 		int v[3]={Ti,*top,top[1]};
 		int ed[3]={top[2],top[4],top[3]};
-		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
-				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
-				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	};
-		// Lengths of each side
-		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
-						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
-						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
-		// Normal vectors
-		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
-						-vb[3]/l[1], vb[2]/l[1],
-						-vb[5]/l[2], vb[4]/l[2] };
-		double B[4]={x2-x1,x3-x1,y2-y1,y3-y1};
-		double detF=B[0]*B[3]-B[1]*B[2];
+		tri_geo(v,vb,l,na);
+		double B[4]={vb[0],vb[2],vb[1],vb[3]};
+		double detF=vb[0]*vb[3]-vb[2]*vb[1];
 		double fac=1/(detF*detF);
 		double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
 
-		int argv[21]; // Global triangle dofs indices
-		int j=3,j1=9,k;
-		for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
-		for (int i=0;i<3;i++) {
-			argv[18+i]=6*n+ed[i]; // Normal derivatives
-			for (k=1;k<3;k++) {
-				argv[j]=6*v[i]+k; // First derivatives
-				j++;
-			}
-			for (k=3;k<6;k++) { // Second derivatives
-				argv[j1]=6*v[i]+k;
-				j1++;
-			}
-		}
+		get_argv(argv,v,ed);
 
 		float signs[21];
 		for (int i=0;i<18;i++) signs[i]=1;
@@ -707,7 +630,7 @@ void mesh::assemble_K() {
 				for (int a=0;a<21;a++)
 				for (int b=0;b<21;b++) {
 					//double C_prod = C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
-					double C_prod = signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
+					double C_prod = 0.001*signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
 					for (int r=0;r<3;r++)
 					for (int s=0;s<3;s++)
 						HaHb += C_prod*The[r]*The[s]*F[9*(21*a+b)+3*r+s];
@@ -717,21 +640,19 @@ void mesh::assemble_K() {
         top+=5; tri+=1;
     }
 	// Convert triplets list to SparseMatrix.
-	// Contributions in the same (row,col) are summed automatically.
 	Kd.setFromTriplets(triplets.begin(),triplets.end());
-	printf("Stiffness matrix assembled\n");
 
-	// TODO: delete (debug)
+	// Debug
 	std::ofstream outputFile("Stiffness matrix.csv");
-	Eigen::MatrixXd M_d(Kd);
-	for (int i=0;i<M_d.rows();i++) {
-		for (int j=0;j<M_d.cols();j++) {
-			outputFile << M_d(i,j) << " ";
-			double diff = abs(M_d(i,j)-M_d(j,i));
+	Eigen::MatrixXd K_dense(Kd);
+	for (int i=0;i<K_dense.rows();i++) {
+		for (int j=0;j<K_dense.cols();j++) {
+			outputFile << K_dense(i,j) << " ";
+			double diff = abs(K_dense(i,j)-K_dense(j,i));
 			if (diff > 1e-13)
 				printf("Stiffness symmetry break. diff=%g\n", diff);
 		}
-		outputFile << std::endl; 
+		outputFile << std::endl;
 	}
 	outputFile.close();
 
@@ -778,6 +699,67 @@ void mesh::centralize(double &wx,double &wy,double &wz) {
 	// Edges
 	for(double *p=pts+6*n;p<pts+Adof2;p++) *p-=sz;
 }
+
+/** Adds in the contact forces between nodes in the mesh.
+ * \param[in] in the mesh point positions.
+ * \param[in] out the mesh point accelerations (cumulative). */
+ /*void mesh::contact_forces(double *in,double *out) {
+	 double *acc=out+3*n,K=100;
+	 const double diamsq=diam*diam,
+				  screen=6,screensq=screen*screen;
+
+	 // Build the proximity grid data structure
+	 pg.setup(in,n);
+	 pg.populate(in,n);
+
+	 // Loop over all of the balls in the simulation
+	 for(int i=0;i<n;i++) {
+
+		 // Determine the grid subregion that could possibly interact with this
+		 // ball
+		 int li,ui,lj,uj,lk,uk;
+		 pg.subregion(in+3*i,diam,li,ui,lj,uj,lk,uk);
+
+		 for(int ck=lk;ck<=uk;ck++) for(int cj=lj;cj<=uj;cj++) {
+			 for(int ci=li;ci<=ui;ci++) {
+				 int ijk=ci+pg.m*(cj+pg.n*ck);
+
+				 // Loop over all mesh points in this block
+				 point_info *pip=pg.p[ijk],*pie=pip+pg.co[ijk];
+				 for(;pip<pie;pip++) if(pip->id>i) {
+					 double dx=pip->x-in[3*i],dy=pip->y-in[3*i+1],dz=pip->z-in[3*i+2],
+							rsq=dx*dx+dy*dy+dz*dz;
+
+					 // If the mesh point is in contact then compute the acceleration
+					 // contribution
+					 if(rsq<diamsq) {
+
+						 // Rule out nearby points on the mesh using initial positions
+						 int i2=pip->id;
+						 double *q=sh_pts+3*i,
+								*r=sh_pts+3*i2,
+								ex=q[0]-r[0],
+								ey=q[1]-r[1],
+								ez=q[2]-r[2];
+
+						 // If the points are far away from each other in the
+						 // mesh coordinates, then apply a contact force
+						 if(ex*ex+ey*ey+ez*ez>screensq) {
+							 double fac=K*(1-diam/sqrt(rsq));
+							 dx*=fac;dy*=fac;dz*=fac;
+							 acc[3*i]+=dx;
+							 acc[3*i+1]+=dy;
+							 acc[3*i+2]+=dz;
+							 acc[3*i2]-=dx;
+							 acc[3*i2+1]-=dy;
+							 acc[3*i2+2]-=dz;
+						 }
+					 }
+				 }
+			 }
+		 }
+	 }
+ }*/
 
 /*void mesh::damp_force(double *in,double *acc,int i,int k) {
     double *ii=in+3*(i+n),*ik=in+3*(k+n),*ai=acc+3*i,*ak=acc+3*k,
