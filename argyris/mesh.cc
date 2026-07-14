@@ -67,7 +67,7 @@ mesh::~mesh() {
 	delete[] normals; delete[] C_glob;
 }
 
-/** Sets up the spring network table and build FEM matrices. */
+/** Sets up the spring network table and builds FEM matrices. */
 void mesh::setup_springs() {
     // Scan the triangle table, and store an edge (i,j) if i<j to ensure that
     // only one copy of each is kept
@@ -126,7 +126,10 @@ void mesh::setup_springs() {
         edp++;
     }
 
-	setup_fem_matrices();
+	if (quadrature)
+		setup_quad_matrices();
+	else
+		setup_fem_matrices();
 }
 
 int mesh::edge_lookup(int i,int j) {
@@ -136,6 +139,315 @@ int mesh::edge_lookup(int i,int j) {
     }
     fputs("Can't find edge index\n",stderr);
     exit(1);
+}
+
+/** Use quadrature to build the FEM change of bases, mass, and 
+	stiffness matrices. */
+void mesh::setup_quad_matrices() {
+	global_normals();
+	buildC();
+	printf("Change of bases matrices have been built.\n");
+
+	// Evaluate second derivatives of Argyris basis functions on reference triangle
+	// Define the Gauss-Legendre points 
+	double tmp_x[6] = { -0.932469514203152, -0.661209386466265, -0.238619186083197,
+					0.238619186083197,  0.661209386466265, 0.932469514203152 };
+	double tmp_w[6] = { 0.171324492379170, 0.360761573048139, 0.467913934572691,
+					0.467913934572691, 0.360761573048139, 0.171324492379170 };
+	//std::memcpy(xi,tmp_x,6*sizeof(double));
+	//std::memcpy(w,tmp_w,6*sizeof(double));
+	xi = tmp_x; w = tmp_w;
+
+	// Build the mass matrix and global stiffness matrix
+	assembleM_quad();
+	assembleK_quad();
+}
+
+/** Assembles the mass matrix using 6-point Gauss-Legendre quadrature. */
+void mesh::assembleM_quad() {
+	// Evaluate each basis function at each Gauss-Legendre point
+	double GL[21][6][6];
+	double phi[21];
+	for (int j=0;j<6;j++) {
+		for (int i=0;i<6;i++) {
+			double x = (xi[j] + 1)/2;
+			double y = (1-x)*(xi[i] + 1)/2;
+			arg_z(x,y,phi);
+			for (int k=0;k<21;k++) {
+				GL[k][j][i] = phi[k];
+			}
+		}
+	}
+
+	M_sp.resize(Adof2,Adof2);
+	typedef Eigen::Triplet<double> T; // Use a list of triplets for fast computation
+	std::vector<T> Mtriplets;
+	Mtriplets.reserve(6*Adof2); // Get (estimated) memory up front for performance
+
+	int *top=tom, tri=0, argv[21];
+	double vb[6], l[3], na[6];
+	for(int Ti=0;Ti<n;Ti++) { // Loop through generating indices
+		while(top<to[Ti+1]) { // Loop through triangles
+			// Get coordinates from reference domain
+			int v[3]={Ti,*top,top[1]};
+			int ed[3]={top[2],top[4],top[3]}; // Edges 1,2,3
+			tri_geo(v,vb,l,na);
+
+			// Reference map Jacobian
+			double detF=vb[0]*vb[3]-vb[2]*vb[1];
+			double mass = detF*rho;
+
+			get_argv(argv,v,ed);
+	
+			for (int I=0;I<21;I++)
+			for (int J=0;J<21;J++) { // TODO - incorporate signs[]?
+				double z = mass_integral(GL,tri, I,J);
+				Mtriplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*z));
+			}
+
+			top+=5; tri+=1;
+		}
+	}
+
+	// Convert triplets list to SparseMatrix.
+	// Contributions in same row,col are summed automatically.
+	M_sp.setFromTriplets(Mtriplets.begin(),Mtriplets.end());
+	//printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
+
+	// Debug
+	Eigen::MatrixXd M_d(M_sp);
+	std::ofstream outputFile("Mass matrix.csv");
+	for (int i=0;i<M_d.rows();i++) {
+		for (int j=0;j<M_d.cols();j++) {
+			outputFile << M_d(i,j) << " ";
+		}
+		outputFile << std::endl; 
+	}
+	outputFile.close();
+
+	// Factorize sparse matrix using LLT Cholesky factorization
+	Msolver.analyzePattern(M_sp);
+	Msolver.factorize(M_sp);
+	if (Msolver.info()!=Eigen::Success) {
+		printf("Mass matrix factorization failed\n");
+		exit(1);
+	}
+	printf("Mass matrix factorization finished.\n");
+}
+
+/** Performs an integration of two basis functions multiplied together
+*	using 6-point Gauss-Legendre quadrature. 
+*	\param[in] GL each of the 21 Argyris basis functions, evaluated 
+				at the 36 quadrature points.
+*	\param[in] tri a particular triangle in the "physical" space. 
+	\param[in] I,J the indices of the basis functions in the integrand. */
+double mesh::mass_integral(double GL[21][6][6], int tri, int I, int J) {
+	double out = 0.,prefac,x;
+	for (int a=0;a<21;a++)
+	for (int b=0;b<21;b++){
+		// Integrate
+		double integral_val = 0.;
+		for (int j=0;j<6;j++) {
+			x = (xi[j] + 1)/2;
+			prefac = w[j]*(1-x)/2;
+			double sumi=0.,phi_a,phi_b;
+			for (int i=0;i<6;i++) {
+				// First function
+				phi_a = C_glob[441*tri+21*a+I]*GL[a][j][i];
+				// Second function
+				phi_b = C_glob[441*tri+21*b+J]*GL[b][j][i];
+				sumi += w[i]*phi_a*phi_b;
+			}
+			integral_val += prefac*sumi;
+		}	
+		integral_val /= 2; 
+		out += integral_val; // TODO - Check that this is the proper implementation of the double-sum
+	}
+	return out;
+}
+
+/** Evaluates the monomial basis at a point (x,y).
+*	\return z[], a 21-array storing the evaluated monomials. */
+void mesh::monomials(double x,double y,double z[21]) {
+	double tmp[21] = { 1, y, y*y, y*y*y, y*y*y*y, y*y*y*y*y,
+		 x, x*y, x*y*y, x*y*y*y, x*y*y*y*y, 
+		 x*x, x*x*y, x*x*y*y, x*x*y*y*y,
+		 x*x*x, x*x*x*y, x*x*x*y*y,
+		 x*x*x*x, x*x*x*x*y, x*x*x*x*x };
+	std::memcpy(z,tmp,21*sizeof(double));
+}
+
+/** Evaluates each Argyris basis function at a point (x,y) 
+	on the reference triangle. 
+*	\return phi[] */
+void mesh::arg_z(double x, double y, double phi[21]) {
+	double z[21];
+	monomials(x,y,z);
+
+	for (int i=0;i<21;i++) {
+		phi[i]=0.;
+		for (int j=0;j<21;j++) {
+			phi[i] += M[21*i+j]*z[j];
+		}
+	}
+}
+
+/** Assembles the K matrix using 6-point Gauss-Legendre quadrature. */
+void mesh::assembleK_quad() {
+	// Evaluate the second derivatives of each basis function at each Gauss-Legendre point
+	double xxGL[21][6][6], xyGL[21][6][6], yyGL[21][6][6]; // Indexing: basis func., then x, then y
+	double xx[21], xy[21], yy[21];
+	for (int j=0;j<6;j++) {
+		for (int i=0;i<6;i++) {
+			double x = (xi[j] + 1)/2;
+			double y = (1-x)*(xi[i] + 1)/2;
+			arg_ders(x,y,xx,xy,yy);
+			for (int k=0;k<21;k++) {
+				xxGL[k][j][i] = xx[k]; xyGL[k][j][i] = xy[k]; yyGL[k][j][i] = yy[k];
+			}
+		}
+	}
+
+	Kd.resize(Adof2, Adof2);
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> Ktriplets;
+	// Get (estimated) memory up front for performance
+	Ktriplets.reserve(6*Adof2);
+
+	int *top=tom, tri=0, argv[21];
+	double vb[6], l[3], na[6];
+	for (int Ti=0;Ti<n;Ti++)
+		while (top<to[Ti+1]) {
+			int v[3]={ Ti,*top,top[1] };
+			int ed[3]={ top[2],top[4],top[3] };
+			tri_geo(v, vb, l, na);
+			double B[4]={ vb[0],vb[2],vb[1],vb[3] };
+			double detF=vb[0]*vb[3] - vb[2]*vb[1];
+			double fac = 1/(detF*detF);
+			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
+
+			get_argv(argv, v, ed);
+
+			double The_inv[3][3] = {{B[3]*B[3]*fac,-2*B[2]*B[3]*fac,B[2]*B[2]*fac},
+									{-B[1]*B[3]*fac,B[0]*B[3]*fac+B[1]*B[2]*fac,-B[0]*B[2]*fac},
+									{B[1]*B[1]*fac,-2*B[0]*B[1]*fac,B[0]*B[0]*fac}};
+			for (int I=0;I<21;I++)
+			for (int J=0;J<21;J++) {
+				// Compute the integral using Gauss-Legendre quadrature (loop through j,i) for these particular (I,J) functions
+				double z=stiff_integral(xxGL, xyGL, yyGL, The_inv, tri,I,J);
+				Ktriplets.push_back(Eigen::Triplet<double>(argv[I], argv[J], prefac*z)); // TODO - incorporate signs?
+			}
+
+			top+=5; tri+=1;
+		}
+	// Convert triplets list to SparseMatrix.
+	Kd.setFromTriplets(Ktriplets.begin(), Ktriplets.end());
+
+	// Debug
+	std::ofstream outputFile("Stiffness matrix.csv");
+	Eigen::MatrixXd K_dense(Kd);
+	for (int i = 0; i < K_dense.rows(); i++) {
+		for (int j = 0; j < K_dense.cols(); j++) {
+			outputFile << K_dense(i, j) << " ";
+			double diff = abs(K_dense(i, j) - K_dense(j, i));
+			if (diff > 1e-13)
+				printf("Stiffness symmetry break. diff=%g\n", diff);
+		}
+		outputFile << std::endl;
+	}
+	outputFile.close();
+
+	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
+	if (llt.info() == Eigen::NumericalIssue) {
+		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
+		//exit(1);
+	}
+}
+
+/** Performs an integration of the Laplacians of two basis functions 
+	multiplied together using 6-point Gauss-Legendre quadrature.
+*	\param[in] xxGL the xx-derivatives of each of the 21 Argyris basis 
+				functions, evaluated at the 36 quadrature points.
+*	\param[in] The_inv[][] the 3x3 Theta^-1 matrix for the physical-to-
+*				reference transformation.
+*	\param[in] tri a particular triangle in the "physical" space.
+	\param[in] I,J the indices of the basis functions in the integrand. */
+double mesh::stiff_integral(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21][6][6],
+							double The_inv[3][3],int tri,
+							int I,int J) {
+	double out = 0.,prefac,x;
+	for (int a=0;a<21;a++) {
+		for (int b=0;b<21;b++){
+			// Integrate
+			double integral_val = 0.;
+			for (int j=0;j<6;j++) {
+				x = (xi[j] + 1)/2;
+				prefac = w[j]*(1-x)/2;
+				double sumi=0.,Da,Db;
+				for (int i=0;i<6;i++) {
+					// First Laplacian
+					Da = laplace(xxGL,xyGL,yyGL, j,i, The_inv, tri,I,a);
+					// Second Laplacian
+					Db = laplace(xxGL,xyGL,yyGL, j,i, The_inv, tri,J,b);
+					sumi += w[i]*Da*Db;
+				}
+				integral_val += prefac*sumi;	
+			}	
+			integral_val /= 2; 
+			out += integral_val; // TODO - I think is the proper implementation of the double-sum
+		}
+	}
+	return out;
+}
+
+/** Evaluates the second derivatives of the monomial basis at a point (x,y).
+*	\return z, a 21-array storing the evaluated monomial derivatives. */
+void mesh::ders(double x,double y,double mxx[21],double mxy[21],double myy[21]) {
+	double tmp[21] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+		2, 2*y, 2*y*y, 2*y*y*y, 6*x, 6*x*y, 6*x*y*y,
+		12*x*x, 12*x*x*y, 20*x*x*x};
+	double tmp1[21] = {0, 0, 0, 0, 0, 0, 0, 1, 2*y, 3*y*y, 
+			4*y*y*y, 0, 2*x, 4*x*y, 6*x*y*y, 0, 3*x*x,
+			6*x*x*y, 0, 4*x*x*x, 0};
+	double tmp2[21] = {0, 0, 2, 6*y, 12*y*y, 20*y*y*y,
+            0, 0, 2*x, 6*x*y, 12*x*y*y,
+            0, 0, 2*x*x, 6*x*x*y,
+			0, 0, 2*x*x*x, 0, 0, 0};
+	std::memcpy(mxx,tmp,21*sizeof(double));
+	std::memcpy(mxy,tmp1,21*sizeof(double));
+	std::memcpy(myy,tmp2,21*sizeof(double));
+}
+
+/** Evaluates the second derivatives of each Argyris basis function at a point (x,y)
+	on the reference triangle.
+*	\return xx,xy,yy */
+void mesh::arg_ders(double x, double y, double xx[21],double xy[21],double yy[21]) {
+	// Evaluate second derivatives in monomial basis
+	double mxx[21],mxy[21],myy[21];
+	ders(x,y,mxx,mxy,myy);
+
+	for (int i=0;i<21;i++) {
+		xx[i]=0.; xy[i]=0.; yy[i]=0.;
+		for (int j=0;j<21;j++) {
+			xx[i] += M[21*i+j]*mxx[j];
+			xy[i] += M[21*i+j]*mxy[j];
+			yy[i] += M[21*i+j]*myy[j];
+		}
+	}
+}
+
+/** Calculates the Laplacian of a basis function in reference coordinates, 
+	evaluated at a quadrature point. */
+double mesh::laplace(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21][6][6],
+						int j,int i, 
+						double The_inv[3][3],int tri,
+						int I,int a) {
+	double dxx, dyy;
+	dxx = xxGL[a][j][i]*The_inv[0][0] + xyGL[a][j][i]*The_inv[1][0] + yyGL[a][j][i]*The_inv[2][0];
+	dyy = xxGL[a][j][i]*The_inv[0][2] + xyGL[a][j][i]*The_inv[1][2] + yyGL[a][j][i]*The_inv[2][2];
+	double out = C_glob[441*tri+21*a+I]*(dxx + dyy);
+
+	return out;
 }
 
 /** Build the FEM change of bases, mass, and stiffness matrices. */
@@ -152,6 +464,7 @@ void mesh::setup_fem_matrices() {
 	assemble_K();
 }
 
+/** Assembles the mass matrix using pre-computed integral values. */
 void mesh::assemble_M() {
 	M_sp.resize(Adof2,Adof2);
 	typedef Eigen::Triplet<double> T; // Use a list of triplets for fast computation
@@ -221,6 +534,77 @@ void mesh::assemble_M() {
 	printf("Mass matrix factorization finished.\n");
 }
 
+/** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
+*	Also checks that the stiffness matrix is positive definite. */
+void mesh::assemble_K() {
+	Kd.resize(Adof2, Adof2);
+	typedef Eigen::Triplet<double> T;
+	std::vector<T> triplets;
+	// Get (estimated) memory up front for performance
+	triplets.reserve(6*Adof2);
+
+	int *top=tom, tri=0, argv[21];
+	double vb[6],l[3],na[6];
+	for (int Ti=0;Ti<n;Ti++)
+		while (top<to[Ti+1]) {
+			int v[3]={ Ti,*top,top[1] };
+			int ed[3]={ top[2],top[4],top[3] };
+			tri_geo(v,vb,l,na);
+			double B[4]={ vb[0],vb[2],vb[1],vb[3] };
+			double detF = vb[0]*vb[3] - vb[2]*vb[1];
+			double fac = 1/(detF*detF);
+			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
+
+			get_argv(argv,v,ed);
+
+			float signs[21];
+			for (int i=0;i<18;i++) signs[i]=1;
+			for (int i=0;i<3;i++)
+				signs[18+i] = na[2*i]*normals[2*ed[i]]+na[2*i+1]*normals[2*ed[i]+1];
+
+			double The[3] = { (B[3]*B[3]+B[1]*B[1])*fac,
+				-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
+
+			for (int I=0;I<21;I++)
+				for (int J=0;J<21;J++) {
+					double HaHb=0.;
+					for (int a=0;a<21;a++)
+						for (int b=0;b<21;b++) {
+							//double C_prod = C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
+							double C_prod=signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
+							for (int r=0;r<3;r++)
+								for (int s=0;s<3;s++)
+									HaHb += C_prod*The[r]*The[s]*F[9*(21*a+b)+3*r+s];
+						}
+					triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
+				}
+			top+=5; tri+=1;
+		}
+	// Convert triplets list to SparseMatrix.
+	Kd.setFromTriplets(triplets.begin(), triplets.end());
+
+	// Debug
+	std::ofstream outputFile("Stiffness matrix.csv");
+	Eigen::MatrixXd K_dense(Kd);
+	for (int i=0;i<K_dense.rows();i++) {
+		for (int j=0;j<K_dense.cols();j++) {
+			outputFile << K_dense(i,j) << " ";
+			double diff = abs(K_dense(i,j) - K_dense(j,i));
+			if (diff > 1e-13)
+				printf("Stiffness symmetry break. diff=%g\n", diff);
+		}
+		outputFile << std::endl;
+	}
+	outputFile.close();
+
+	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
+	if (llt.info()==Eigen::NumericalIssue) {
+		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
+		//exit(1);
+	}
+}
+
+
 /** Define the global normal orientations */
 void mesh::global_normals() {
 	normals = new double[2*ns];
@@ -275,6 +659,26 @@ void mesh::tri_geo(int v[3], double* vb, double* l, double* na) {
 	na[0]=-vb[1]/l[0]; na[1]=vb[0]/l[0];
 	na[2]=-vb[3]/l[1]; na[3]=vb[2]/l[1];
 	na[4]=-vb[5]/l[2]; na[5]=vb[4]/l[2];
+}
+
+/** Get the global indices for a given triangle.
+*	\param[in] v the vertices of the triangle.
+	\param[in] ed the edges of the triangle. 
+	\return argv the global indexing. */
+void mesh::get_argv(int* argv, int v[3], int ed[3]) {
+	int j=3,j1=9,k;
+	for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
+	for (int i=0;i<3;i++) {
+		argv[18+i]=6*n+ed[i]; // Normal derivatives
+		for (k=1;k<3;k++) {
+			argv[j]=6*v[i]+k; // First derivatives
+			j++;
+		}
+		for (k=3;k<6;k++) { // Second derivatives
+			argv[j1]=6*v[i]+k;
+			j1++;
+		}
+	}
 }
 
 // Build change of bases matrices for each triangle
@@ -364,6 +768,7 @@ void mesh::buildC() {
 	}
 }
 
+/** Displace the points in the "z" direction with a Gaussian */
 void mesh::Gauss_displacement() {
 	const double eps=0.001;
 	// Initialize function values and gradients at all nodes
@@ -461,7 +866,7 @@ void mesh::linear_gradient() {
 	}
 }
 
-void mesh::const_pert() {
+void mesh::const_displacement() {
 	const float eps = .001;
 	for (int i=0;i<n;i++) pts[6*i]+=eps;
 }
@@ -509,7 +914,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	std::memcpy(acc,av.data(),Adof2*sizeof(double));
 
 	// Debug: Calculate the residual
-	Eigen::MatrixXd M_d(M_sp);
+	/*Eigen::MatrixXd M_d(M_sp);
 	for (int i=0;i<Adof2;i++) {
 		double Mx = 0.;
 		for (int j=0;j<Adof2;j++) {
@@ -518,7 +923,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		double residual = Mx-f_sum[i];
 		printf("Residual: %g\n",residual);
 	}
-	printf("\n");
+	printf("\n");*/
 
     // Assemble the velocities in the first part of the out array. 
 	for(i=0;i<n;i++)
@@ -570,96 +975,6 @@ void mesh::local_Kq_multiply(int tri, int Ti) {
 			loc_Kq[I] += K_dense(argv[I],argv[J])*pts[argv[J]];
 		}
 		printf("index: %d, val: %g\n",argv[I],loc_Kq[I]);
-	}
-}
-
-/** Get the global indices for a given triangle.
-*	\param[in] v the vertices of the triangle.
-	\param[in] ed the edges of the triangle. 
-	\return argv the global indexing. */
-void mesh::get_argv(int* argv, int v[3], int ed[3]) {
-	int j=3,j1=9,k;
-	for (k=0;k<3;k++) argv[k]=6*v[k]; // Function values
-	for (int i=0;i<3;i++) {
-		argv[18+i]=6*n+ed[i]; // Normal derivatives
-		for (k=1;k<3;k++) {
-			argv[j]=6*v[i]+k; // First derivatives
-			j++;
-		}
-		for (k=3;k<6;k++) { // Second derivatives
-			argv[j1]=6*v[i]+k;
-			j1++;
-		}
-	}
-}
-
-/** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
-*	Checks that the stiffness matrix is positive definite. */
-void mesh::assemble_K() {
-	Kd.resize(Adof2,Adof2);
-	typedef Eigen::Triplet<double> T;
-	std::vector<T> triplets;
-	// Get (estimated) memory up front for performance
-	triplets.reserve(6*Adof2);
-
-	int *top=tom, tri=0, argv[21];
-	double vb[6],l[3],na[6];
-    for(int Ti=0;Ti<n;Ti++) 
-    while(top<to[Ti+1]) {
-		int v[3]={Ti,*top,top[1]};
-		int ed[3]={top[2],top[4],top[3]};
-		tri_geo(v,vb,l,na);
-		double B[4]={vb[0],vb[2],vb[1],vb[3]};
-		double detF=vb[0]*vb[3]-vb[2]*vb[1];
-		double fac=1/(detF*detF);
-		double prefac=kappa*detF; // TODO: Use the same bending modulus as before?
-
-		get_argv(argv,v,ed);
-
-		float signs[21];
-		for (int i=0;i<18;i++) signs[i]=1;
-		for (int i=0;i<3;i++)
-			signs[18+i] = na[2*i]*normals[2*ed[i]]+na[2*i+1]*normals[2*ed[i]+1];
-
-		double The[3]={ (B[3]*B[3]+B[1]*B[1])*fac, 
-			-2*(B[2]*B[3]+B[0]*B[1])*fac, (B[2]*B[2]+B[0]*B[0])*fac };
-			
-		for (int I=0;I<21;I++) 
-		for (int J=0;J<21;J++) {
-				double HaHb=0.;
-				for (int a=0;a<21;a++)
-				for (int b=0;b<21;b++) {
-					//double C_prod = C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
-					double C_prod = 0.001*signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
-					for (int r=0;r<3;r++)
-					for (int s=0;s<3;s++)
-						HaHb += C_prod*The[r]*The[s]*F[9*(21*a+b)+3*r+s];
-				}
-				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb)); 
-		}
-        top+=5; tri+=1;
-    }
-	// Convert triplets list to SparseMatrix.
-	Kd.setFromTriplets(triplets.begin(),triplets.end());
-
-	// Debug
-	std::ofstream outputFile("Stiffness matrix.csv");
-	Eigen::MatrixXd K_dense(Kd);
-	for (int i=0;i<K_dense.rows();i++) {
-		for (int j=0;j<K_dense.cols();j++) {
-			outputFile << K_dense(i,j) << " ";
-			double diff = abs(K_dense(i,j)-K_dense(j,i));
-			if (diff > 1e-13)
-				printf("Stiffness symmetry break. diff=%g\n", diff);
-		}
-		outputFile << std::endl;
-	}
-	outputFile.close();
-
-	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
-	if (llt.info() == Eigen::NumericalIssue) {
-		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
-		//exit(1);
 	}
 }
 

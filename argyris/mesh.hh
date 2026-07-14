@@ -81,22 +81,28 @@ class mesh : public mesh_param {
         int **to;
         /** Memory for the triangular elements of the mesh. */
         int *tom;
-		/** FEM Sparse mass matrix */
-		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
-		/** FEM Mass matrix Sparse Cholesky solver */
-		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > Msolver;
-		/** FEM Biharmonic term */
-		Eigen::VectorXd Kq;
 		/** Argyris degrees of freedom */
 		int Adof;
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
-		/** Argyris change of bases matrix */
-		double *C_glob;
+		/** FEM Sparse mass matrix */
+		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
+		/** FEM Mass matrix Sparse Cholesky solver */
+		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > Msolver;
 		/** Argyris stiffness matrix */
 		Eigen::SparseMatrix<double, Eigen::RowMajor> Kd;
+		/** FEM Biharmonic term */
+		Eigen::VectorXd Kq;
+		/** Argyris change of bases matrix */
+		double *C_glob;
 		/** Global normal vectors to edges */
 		double *normals;
+		/** Whether to use quadrature or exact integration for the FEM. */
+		bool quadrature;
+		/** Gauss-Legendre quadrature points */
+		double *xi;
+		/** Gauss-Legendre quadrature weights */
+		double *w; 
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -124,21 +130,42 @@ class mesh : public mesh_param {
 		double tot_area_rec(int nx,int ny);
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
-		/** FEM Functions */
+		/** Small FEM helper functions */
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		void Kq_multiply(double* in);
-		void buildC();
+		void local_Kq_multiply(int tri, int Ti);
+		void get_argv(int* argv, int v[3], int ed[3]);
+		void tri_geo(int v[3], double* vb, double* l, double* na);
+		/** Initial displacement functions */
 		void Gauss_displacement();
 		void linear_gradient();
-		void const_pert();
+		void const_displacement();
+		/** FEM Matrix Assembly functions */
+		void setup_fem_matrices();
+		void buildC();
 		void assemble_K();
 		void assemble_M();
 		void global_normals();
-		void get_argv(int* argv, int v[3], int ed[3]);
-		void local_Kq_multiply(int tri, int Ti);
-		void setup_fem_matrices();
-		void tri_geo(int v[3], double* vb, double* l, double* na);
+		
+		/** Quadrature helper functions */
+		void setup_quad_matrices();
+		/** Mass matrix assembly (with quadrature) functions */
+		void assembleM_quad();
+			void monomials(double x, double y, double z[21]);
+			void arg_z(double x, double y, double phi[21]);
+			double mass_integral(double GL[21][6][6], int tri, int I, int J);
+		/** Stiffness matrix assembly (with quadrature) functions */
+		void assembleK_quad();
+			void ders(double x, double y, double mxx[21],double mxy[21],double myy[21]);
+			void arg_ders(double x, double y, double xx[21], double xy[21], double yy[21]);
+			double stiff_integral(double xxGL[21][6][6], double xyGL[21][6][6], double yyGL[21][6][6],
+							double The_inv[3][3], int tri,
+							int I, int J);
+			double laplace(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21][6][6],
+							int j,int i, 
+							double The_inv[3][3],int tri,
+							int I,int a);
 
         //void accel_repulsive(double *in,double *acc);
         void check_deriv(double t_);

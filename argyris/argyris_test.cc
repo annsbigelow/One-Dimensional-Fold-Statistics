@@ -6,10 +6,12 @@
 #include "mesh.hh"
 
 int main() {
-
 	// Create mesh and initialize acceleration
 	mesh_param par(0.05, 0.03, 0.001, false, false);
 	mesh_rk4 mp(par, "sh48_3x3.bin");
+
+	// Set whether to use quadrature or not
+	mp.quadrature = false;
 
 	// Centralize and scale the mesh
 	double wx, wy, wz;
