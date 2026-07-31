@@ -65,6 +65,7 @@ mesh::~mesh() {
 
 	// FEM terms
 	delete[] normals; delete[] C_glob;
+	delete[] edp_vals; delete[] ed_vals;
 }
 
 /** Sets up the spring network table and builds FEM matrices. */
@@ -73,7 +74,7 @@ void mesh::setup_springs() {
     // only one copy of each is kept
     eo=new int*[n+1];
     eom=new int[ns];
-    int i,*eop=eom,*edp=edm;
+    int i,*eop=eom,*edp=edm;       
     for(i=0;i<n;i++) {
         eo[i]=eop;
         while(edp<ed[i+1]) {
@@ -126,6 +127,15 @@ void mesh::setup_springs() {
         edp++;
     }
 
+	// Define the global normal directions
+	global_normals();
+	// Build change of bases matrices
+	buildC();
+}
+
+void mesh::build_matrices() {
+	quadrature=false;
+
 	if (quadrature)
 		setup_quad_matrices();
 	else
@@ -144,9 +154,6 @@ int mesh::edge_lookup(int i,int j) {
 /** Use quadrature to build the FEM change of bases, mass, and 
 	stiffness matrices. */
 void mesh::setup_quad_matrices() {
-	global_normals();
-	buildC();
-	printf("Change of bases matrices have been built.\n");
 
 	// Evaluate second derivatives of Argyris basis functions on reference triangle
 	// Define the Gauss-Legendre points 
@@ -404,8 +411,8 @@ double mesh::stiff_integral(double xxGL[21][6][6],double xyGL[21][6][6],double y
 *	\return z, a 21-array storing the evaluated monomial derivatives. */
 void mesh::ders(double x,double y,double mxx[21],double mxy[21],double myy[21]) {
 	double tmp[21] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-		2, 2*y, 2*y*y, 2*y*y*y, 6*x, 6*x*y, 6*x*y*y,
-		12*x*x, 12*x*x*y, 20*x*x*x};
+					2, 2*y, 2*y*y, 2*y*y*y, 6*x, 6*x*y, 6*x*y*y,
+					12*x*x, 12*x*x*y, 20*x*x*x};
 	double tmp1[21] = {0, 0, 0, 0, 0, 0, 0, 1, 2*y, 3*y*y, 
 			4*y*y*y, 0, 2*x, 4*x*y, 6*x*y*y, 0, 3*x*x,
 			6*x*x*y, 0, 4*x*x*x, 0};
@@ -416,6 +423,39 @@ void mesh::ders(double x,double y,double mxx[21],double mxy[21],double myy[21]) 
 	std::memcpy(mxx,tmp,21*sizeof(double));
 	std::memcpy(mxy,tmp1,21*sizeof(double));
 	std::memcpy(myy,tmp2,21*sizeof(double));
+}
+
+/** Evaluates the first derivatives of the monomial basis at a point (x,y).
+*	\return z, a 21-array storing the evaluated monomial derivatives. */
+void mesh::grads(double x,double y,double mx[21],double my[21]) {
+	double tmp[21] = { 0, 0, 0, 0, 0, 0, 
+					  1, y, y*y, y*y*y, y*y*y*y,
+					  2*x, 2*x*y, 2*x*y*y, 2*x*y*y*y,
+					  3*x*x, 3*x*x*y, 3*x*x*y*y,
+					  4*x*x*x, 4*x*x*x*y, 5*x*x*x*x };
+	double tmp1[21] = { 0, 1, 2*y, 3*y*y, 4*y*y*y, 5*y*y*y*y,
+					  0, x, 2*x*y, 3*x*y*y, 4*x*y*y*y,
+					  0, x*x, 2*x*x*y, 3*x*x*y*y,
+					  0, x*x*x, 2*x*x*x*y, 0, x*x*x*x, 0 };
+	std::memcpy(mx,tmp,21*sizeof(double));
+	std::memcpy(my,tmp1,21*sizeof(double));
+}
+
+/** Evaluates the first derivatives of each Argyris basis function at a point (x,y)
+	on the reference triangle.
+*	\return dx,dy */
+void mesh::arg_grads(double x,double y,double dx[21],double dy[21]) {
+	// Evaluate first derivatives in monomial basis
+	double mx[21],my[21];
+	grads(x,y,mx,my);
+
+	for (int i=0;i<21;i++) {
+		dx[i]=0.; dy[i]=0.;
+		for (int j=0;j<21;j++) {
+			dx[i] += M[21*i+j]*mx[j];
+			dy[i] += M[21*i+j]*my[j];
+		}
+	}
 }
 
 /** Evaluates the second derivatives of each Argyris basis function at a point (x,y)
@@ -452,13 +492,6 @@ double mesh::laplace(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21]
 
 /** Build the FEM change of bases, mass, and stiffness matrices. */
 void mesh::setup_fem_matrices() {
-	// Define the global normal directions
-	global_normals();
-
-	// Build change of bases matrices
-	buildC();
-	printf("Change of bases matrices have been built.\n");
-
 	// Build the mass matrix and global stiffness matrix
 	assemble_M();
 	assemble_K();
@@ -554,6 +587,10 @@ void mesh::assemble_K() {
 			double detF = vb[0]*vb[3] - vb[2]*vb[1];
 			double fac = 1/(detF*detF);
 			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
+			if (detF <= 1e-13) {
+				printf("Error: detF < 0.\n");
+				exit(1);
+			}
 
 			get_argv(argv,v,ed);
 
@@ -603,7 +640,6 @@ void mesh::assemble_K() {
 		//exit(1);
 	}
 }
-
 
 /** Define the global normal orientations */
 void mesh::global_normals() {

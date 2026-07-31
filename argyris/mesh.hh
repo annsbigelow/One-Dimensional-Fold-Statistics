@@ -102,7 +102,13 @@ class mesh : public mesh_param {
 		/** Gauss-Legendre quadrature points */
 		double *xi;
 		/** Gauss-Legendre quadrature weights */
-		double *w; 
+		double *w;
+		/** Number of partitions along an edge for curvy visualization. */
+		int np;
+		/** Pointers to solution values at extra edge points. */
+		double **edp_vals;
+		/** Memory for solution values at extra edge points. */
+		double *ed_vals;
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -131,6 +137,7 @@ class mesh : public mesh_param {
 		int find_pos_rec(int &i, int &j,int nx);
 		bool inside(int i,int j,int nt,int ny,int sub);
 		/** Small FEM helper functions */
+		void build_matrices();
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		void Kq_multiply(double* in);
@@ -147,6 +154,15 @@ class mesh : public mesh_param {
 		void assemble_K();
 		void assemble_M();
 		void global_normals();
+		/** Curvy triangle visualization */
+		void interpolate();
+		void grads(double x,double y,double mx[21],double my[21]);
+		void arg_grads(double x,double y,double dx[21],double dy[21]);
+		double phys_phi_eval(int tri,int j,double phi[21]);
+		void calculate_q(int v[3],int ed[3],int tri,int i, int j,
+						double &physx,double &physy,double &soln);
+		void triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3]);
+		void fill_ed_vals(double *pt,int tri,int v[3],int ed[3],int i,int j);
 		
 		/** Quadrature helper functions */
 		void setup_quad_matrices();
@@ -187,6 +203,7 @@ class mesh : public mesh_param {
             fclose(fp);
         }
         void draw_mesh_gnuplot(FILE *fp=stdout);
+		void draw_mesh_gnuplot_deluxe(FILE *fp=stdout);
         inline void draw_mesh_pov(const char *filename,bool normals=true) {
             FILE *fp=safe_fopen(filename,"w");
             draw_mesh_pov(fp);
