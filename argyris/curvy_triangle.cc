@@ -1,13 +1,201 @@
 #include <cstring>
+#include <fstream>
 
 #include "mesh.hh"
+
+/** Check that the physical Argyris basis functions are 1 and 0 where they should be. */
+void mesh::debug() {
+
+	double bigL[ntri][21][21];
+	std::ofstream outputFile("L (1).csv");
+
+	// Loop through triangles
+	int *top=tom,tri=0,argv[21];
+	for(int Ti=0;Ti<n;Ti++) {
+		while(top<to[Ti+1]) {
+			// Get global indexing of physical triangle.
+			int v[3]={ Ti,*top,top[1] },
+				ed[3]={ top[2],top[4],top[3] };
+			get_argv(argv, v, ed);
+			double  *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+					*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+					*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+			double B[4]={ x2-x1,x3-x1,y2-y1,y3-y1 };
+			double detF = B[0]*B[3] - B[2]*B[1];
+			double vb[6],l[3],na[6]; // The sides, side lengths, and normals
+			tri_geo(v,vb,l,na);
+
+			// Map the physical vertices to reference vertices.
+			double diffx[3] = {0,x2-x1,x3-x1},
+					diffy[3] = {0,y2-y1,y3-y1};
+			double	refx[3],refy[3];
+			for(int k=0;k<3;k++) {
+				refx[k] = (diffx[k]*B[3] - diffy[k]*B[1])/detF;
+				refy[k] = (-diffx[k]*B[2] + diffy[k]*B[0])/detF;
+			}
+			// Also map the midpoints.
+			double mx[3]={(x2+x1)/2,(x3+x1)/2,(x2+x3)/2},
+				   my[3]={(y2+y1)/2,(y3+y1)/2,(y2+y3)/2};
+			double mrefx[3],mrefy[3];
+			for(int k=0;k<3;k++) {
+				mrefx[k]=((mx[k]-x1)*B[3] - (my[k]-y1)*B[1])/detF;
+				mrefy[k]=(-(mx[k]-x1)*B[2] + (my[k]-y1)*B[0])/detF;
+			}
+
+			double L[21][21];
+			for(int a=0;a<21;a++) for(int b=0;b<21;b++) L[a][b]=0;
+
+			double ptx,pty,phi_ref[21];
+			double phi_refx[21],phi_refy[21],dx,dy; // Derivatives of ref. basis functions
+			double phi_refxx[21],phi_refxy[21],phi_refyy[21]; // Second derivatives
+			double fac=1/(detF*detF),dxx,dxy,dyy;
+			// Vertex DOFs
+			for(int k=0;k<3;k++) { // Loop through each of the vertices
+				ptx=refx[k]; pty=refy[k];
+				// Evaluate the functions, gradients, and Hessians at this reference point
+				arg_z(ptx,pty,phi_ref);
+				arg_grads(ptx,pty,phi_refx,phi_refy);
+				arg_ders(ptx,pty,phi_refxx,phi_refxy,phi_refyy);
+				for(int j=0;j<21;j++) {
+					// Function values
+					L[k][j]=phys_phi_eval(tri,j,phi_ref);
+					if(std::abs(L[k][j])<1e-13) L[k][j]=0.;
+					// Gradients
+					compute_gradients(j,phi_refx,phi_refy,detF,B,tri,dx,dy);
+					if(std::abs(dx)<1e-13) dx=0;
+					if(std::abs(dy)<1e-13) dy=0;
+					L[3+2*k][j]=dx; L[3+2*k+1][j]=dy;
+					// Hessians
+					dxx=0; dxy=0; dyy=0;
+					for (int i=0;i<21;i++) { // Change of basis
+						// Compute Hessian of j-th physical basis function
+						dxx+=C_glob[441*tri+21*i+j]*(phi_refxx[i]*B[3]*B[3] - 
+													phi_refxy[i]*2*B[2]*B[3] +
+													phi_refyy[i]*B[2]*B[2])*fac;
+						dxy+=C_glob[441*tri+21*i+j]*(-phi_refxx[i]*B[1]*B[3] + 
+													phi_refxy[i]*(B[0]*B[3]+B[1]*B[2]) - 
+													phi_refyy[i]*B[0]*B[2])*fac;
+						dyy+=C_glob[441*tri+21*i+j]*(phi_refxx[i]*B[1]*B[1] -
+													phi_refxy[i]*2*B[0]*B[1] +
+													phi_refyy[i]*B[0]*B[0])*fac;
+					}
+					if(std::abs(dxx)<1e-13) dxx=0;
+					L[9+3*k][j]=dxx;
+					if(std::abs(dxy)<1e-13) dxy=0;
+					L[9+3*k+1][j]=dxy;
+					if(std::abs(dyy)<1e-13) dyy=0;
+					L[9+3*k+2][j]=dyy;
+				}
+			}
+
+			// Edge-normal DOFs
+			double dn;
+			for(int k=0;k<3;k++) { // Loop through edges
+				ptx=mrefx[k]; pty=mrefy[k];
+				arg_grads(ptx, pty, phi_refx, phi_refy);
+				for(int j=0;j<21;j++) {
+					compute_gradients(j,phi_refx,phi_refy,detF,B,tri,dx,dy);
+					// Calculate the normal derivative
+					dn=na[2*k]*dx+na[2*k+1]*dy;
+					if(std::abs(dn)<1e-13) dn=0;
+					L[18+k][j]=dn;
+				}
+			}
+			
+			for(int a=0;a<21;a++) 
+			for(int b=0;b<21;b++) bigL[tri][a][b]=L[a][b];
+
+			top+=5; tri++;
+		}
+	}
+	for(int T=0;T<ntri;T++) {
+		for(int a=0;a<21;a++){
+			for(int b=0;b<21;b++) {
+				outputFile << bigL[T][a][b] << " ";
+			}
+			outputFile << std::endl;
+		}
+		outputFile << std::endl;
+	}
+	outputFile.close();
+	printf("DOF matrix outputted to .csv file.\n");
+
+	// Output the same matrix for the reference triangle
+	double L_ref[21][21];
+	double x[3]={0,1,0}, y[3]={0,0,1};
+	double ptx,pty,phi_ref[21];
+	double phi_refx[21], phi_refy[21];
+	double phi_refxx[21], phi_refxy[21], phi_refyy[21];
+	// Vertex-valued DOFs
+	for(int k=0;k<3;k++) {
+		ptx=x[k]; pty=y[k];
+		arg_z(ptx,pty,phi_ref);
+		arg_grads(ptx,pty,phi_refx,phi_refy);
+		arg_ders(ptx,pty,phi_refxx,phi_refxy,phi_refyy);
+		for(int j=0;j<21;j++) {
+			if(std::abs(phi_ref[j])<1e-13) phi_ref[j]=0.;
+			if(std::abs(phi_refx[j])<1e-13) phi_refx[j]=0.;
+			if(std::abs(phi_refy[j])<1e-13) phi_refy[j]=0.;
+			if(std::abs(phi_refxx[j])<1e-13) phi_refxx[j]=0.;
+			if(std::abs(phi_refxy[j])<1e-13) phi_refxy[j]=0.;
+			if(std::abs(phi_refyy[j])<1e-13) phi_refyy[j]=0.;
+			L_ref[k][j]=phi_ref[j];
+			L_ref[3+2*k][j]=phi_refx[j]; L_ref[3+2*k+1][j]=phi_refy[j];
+			L_ref[9+3*k][j]=phi_refxx[j]; 
+			L_ref[9+3*k+1][j]=phi_refxy[j]; L_ref[9+3*k+2][j]=phi_refyy[j];
+		}
+	}
+	// Edge-normal DOFs
+	double mx[3]={.5,0,.5}, my[3]={0,.5,.5};
+	double n_ref[6] = { 0, 1,
+					-1, 0,
+					-1/sqrt(2), -1/sqrt(2) };
+	double dn;
+	for(int k=0;k<3;k++) {
+		ptx=mx[k]; pty=my[k];
+		arg_grads(ptx,pty,phi_refx,phi_refy);
+		for(int j=0;j<21;j++) {
+			dn=n_ref[2*k]*phi_refx[j]+n_ref[2*k+1]*phi_refy[j];
+			if(std::abs(dn)<1e-13) dn=0.;
+			L_ref[18+k][j]=dn;
+		}
+	}
+	std::ofstream outputFile1("L ref.csv");
+	for(int a=0;a<21;a++){
+		for(int b=0;b<21;b++) {
+			outputFile1 << L_ref[a][b] << " ";
+		}
+		outputFile1 << std::endl;
+	}
+	outputFile1.close();
+	printf("Reference DOF matrix outputted to .csv file.\n");
+}
+
+/** Compute the gradient of a physical Argyris function (evaluated at a point in physical space)
+	by transforming the gradients of reference Argyris functions (at the corresponding mapped point
+	on the reference triangle). 
+*	\param[in] j the index of the physical function, from 0-20. 
+*	\param[in] phi_refx the x-derivatives of the 21 reference functions.
+*	\param[in] phi_refy the y-derivatives of the 21 reference functions. 
+*	\param[in] detF the determinant of the affine reference mapping.
+*	\param[in] B the reference mapping matrix. 
+*	\param[in] tri the current physical triangle.
+*	\return dx,dy the gradient. */
+void mesh::compute_gradients(int j,double phi_refx[21],double phi_refy[21],
+							double detF,double B[4],int tri,double &dx,double &dy) {
+	dx=0; dy=0;
+	// Do the change of basis
+	for (int i=0;i<21;i++) {
+		// Compute gradient
+		dx+=C_glob[441*tri+21*i+j]*(phi_refx[i]*B[3]-phi_refy[i]*B[2])/detF;
+		dy+=C_glob[441*tri+21*i+j]*(-phi_refx[i]*B[1]+phi_refy[i]*B[0])/detF;
+	}
+}
 
 /** A deluxe version of draw_mesh_gnuplot(), allowing for 
 *	curvy triangle visualization by finding the solution along the edges
 *	of the triangles. */
 void mesh::draw_mesh_gnuplot_deluxe(FILE *fp) {
-	// Set the number of partitions along the edges.
-	np=6;
 	// Set up tables to be able to access eo[], used in edge_lookup()
 	setup_springs();
 	// Calculate the solution at each new edge point

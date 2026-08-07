@@ -25,8 +25,10 @@ int main() {
 	// Apply perturbation in z-direction
 	mp.linear_gradient();
 
+	mp.debug();
+
 	// Solve!
 	//mp.solve_fixed(1e-2, 2, true);
 	//mp.solve_adaptive(1, 1e-4, 1e-4, false, 1);
-	printf("Elapsed solution time: %g seconds\n", omp_get_wtime() - start_time);
+	//printf("Elapsed solution time: %g seconds\n", omp_get_wtime() - start_time);
 }

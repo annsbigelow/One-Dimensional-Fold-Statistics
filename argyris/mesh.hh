@@ -144,6 +144,9 @@ class mesh : public mesh_param {
 		void local_Kq_multiply(int tri, int Ti);
 		void get_argv(int* argv, int v[3], int ed[3]);
 		void tri_geo(int v[3], double* vb, double* l, double* na);
+		void debug();
+		void compute_gradients(int j, double phi_refx[21], double phi_refy[21],
+			double detF, double B[4], int tri, double& dx, double& dy);
 		/** Initial displacement functions */
 		void Gauss_displacement();
 		void linear_gradient();

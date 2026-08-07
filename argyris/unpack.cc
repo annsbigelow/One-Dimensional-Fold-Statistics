@@ -7,9 +7,10 @@
 int main(int argc,char **argv) {
 
     // Check for the correct number of command-line arguments
-    if(argc<4||argc>5) {
-        fputs("Syntax: ./unpack <mode> <directory> <frame> <output_filename>\n"
-              "        ./unpack <mode> <input_filename> <output_filename>\n\n"
+    if(argc<5||argc>6) {
+        fputs("Syntax: ./unpack <mode> <directory> <frame> <output_filename> <partitions>\n"
+              "        ./unpack <mode> <input_filename> <output_filename> <partitions>\n\n"
+			  "Partitions: number of added points on an edge for curvy visualization, plus one.\n\n"
               "Mode: \"msh\" for POV-Ray mesh (with normals)\n"
               "      \"mtr\" for POV-Ray mesh (with flat triangles, no normals)\n"
               "      \"gnu\" for Gnuplot mesh\n"
@@ -18,13 +19,13 @@ int main(int argc,char **argv) {
               "      \"txt\" for plain text vertices\n"
               "      \"edg\" for plain text edge table\n"
 			  "      \"curvy\" for refined Gnuplot mesh\n\n"
-              "If the output filename is \"-\" then the data will written to standard\n"
+              "If the output filename is \"-\" then the data will be written to standard\n"
               "output\n",stderr);
         return 1;
     }
 
     // Find output mode
-    int mode,fnum;
+    int mode,fnum,np;
     if(strcmp(argv[1],"msh")==0) mode=0;
     else if(strcmp(argv[1],"mtr")==0) mode=1;
     else if(strcmp(argv[1],"gnu")==0) mode=2;
@@ -41,7 +42,8 @@ int main(int argc,char **argv) {
     // Read in the mesh
     mesh_param par(0.05,0.02,false);
     mesh *mp;
-    if(argc==5) {
+	np=atoi(argv[argc-1]);
+    if(argc==6) {
 
         // If the are five command line arguments, then look for mesh
         // information and topology separately in an output directory. First,
@@ -65,8 +67,9 @@ int main(int argc,char **argv) {
 
     // Output the relevant data, checking for when the output filename is "-"
     // to signal that the data should be sent to standard output
-    bool std=strcmp(argv[argc-1],"-")==0;
-    FILE *fp=std?stdout:safe_fopen(argv[argc-1],"w");
+    bool std=strcmp(argv[argc-2],"-")==0;
+    FILE *fp=std?stdout:safe_fopen(argv[argc-2],"w");
+	mp->np=np;
     switch(mode) {
         case 0: mp->draw_mesh_pov(fp);break;
         case 1: mp->draw_mesh_pov(fp,false);break;

@@ -562,7 +562,7 @@ void mesh::assemble_M() {
 	Msolver.factorize(M_sp);
 	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
-		exit(1);
+		//exit(1);
 	}
 	printf("Mass matrix factorization finished.\n");
 }
@@ -588,8 +588,8 @@ void mesh::assemble_K() {
 			double fac = 1/(detF*detF);
 			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
 			if (detF <= 1e-13) {
-				printf("Error: detF < 0.\n");
-				exit(1);
+				printf("Error: detF=%g < 0. Triangle %d.\n",detF,tri);
+				//exit(1);
 			}
 
 			get_argv(argv,v,ed);
@@ -773,7 +773,7 @@ void mesh::buildC() {
 		for (i=0;i<18;i++) 
 			E[21*i+i]=1;
 		for (i=0;i<3;i++)
-			E[21*(18+i)+18+i]=sqrt(l2[i]);
+			E[21*(18+i)+18+i]=l[i];
 		// Final "T" block of E
 		double T1[9]={-1,1,0, -1,0,1, 0,-1,1};
 		double T2[18]={	vb[0],vb[1], vb[0],vb[1], 0,0,
