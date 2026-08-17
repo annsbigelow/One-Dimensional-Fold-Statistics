@@ -43,11 +43,27 @@ void mesh::read_positions(FILE *fp) {
     // Set up the memory for the integration routines
     pts=new double[Adof];vel=pts+Adof2;
 
-    // Read in the points and set velocities to zero
-    xyz=new double[3*n];
-    safe_fread(xyz,sizeof(double),3*n,fp,"vertex positions");
-	for(int i=0;i<Adof2;i++) vel[i]=0.;
-	for(int i=0;i<n;i++) pts[6*i]=xyz[3*i+2];
+	// Read in the points and set velocities to zero
+	if(r_all_dofs) {
+		double *tmp=new double[8*n+ns];
+		safe_fread(tmp,sizeof(double),8*n+ns,fp,"Argyris positions");
+
+		for(int i=0;i<Adof2;i++) vel[i]=0.;
+
+		xyz=new double[3*n];
+		for(int i=0;i<n;i++) {
+			xyz[3*i]=tmp[8*i]; xyz[3*i+1]=tmp[8*i+1]; xyz[3*i+2]=tmp[8*i+2];
+			for(int k=0;k<6;k++) pts[6*i+k]=tmp[8*i+2+k];
+		}
+		for(int i=0;i<ns;i++) pts[6*n+i]=tmp[8*n+i];
+		delete[] tmp;
+	}
+	else {
+		xyz=new double[3*n];
+		safe_fread(xyz,sizeof(double),3*n,fp,"vertex positions");
+		for(int i=0;i<Adof2;i++) vel[i]=0.;
+		for(int i=0;i<n;i++) pts[6*i]=xyz[3*i+2];
+	}
 }
 
 /** Saves the node positions as text to a file.
@@ -262,21 +278,32 @@ void mesh::mesh_print_dense(int fr,double t_,double *in) {
 }
 
 void mesh::mesh_print_last_step() {
-	sprintf(obuf,"%s/pts.%d",odir,1);
-    FILE *fp=safe_fopen(obuf,"wb");
-
-	// TODO: delete later: print xyz coordinates only
-	// START TEST
-	double *Apts = new double[3*n]; 
-	for (int i=0,j=0;j<6*n;i+=3,j+=6) {
-		Apts[i] = xyz[i];
-		Apts[i+1] = xyz[i+1];
-		Apts[i+2] = pts[j];
+	if(wr_all_dofs) {
+		sprintf(obuf,"%s/pts_Argyris.%d",odir,1);
+		FILE *fp=safe_fopen(obuf,"wb");
+		double *Apts=new double[8*n+ns];
+		for(int i=0;i<n;i++) {
+			Apts[8*i]=xyz[3*i]; Apts[8*i+1]=xyz[3*i+1];
+			for(int k=0;k<6;k++) Apts[8*i+2+k]=pts[6*i+k];
+		}
+		for(int i=0;i<ns;i++) Apts[8*n+i]=pts[6*n+i];
+		fwrite(Apts,sizeof(double),8*n+ns,fp);
+		delete[] Apts;
+		fclose(fp);
 	}
-	fwrite(Apts,sizeof(double),3*n,fp);
-	delete[] Apts;
-	// END TEST
-    fclose(fp);
+	else {
+		sprintf(obuf,"%s/pts.%d",odir,1);
+		FILE *fp=safe_fopen(obuf,"wb");
+		double *Apts = new double[3*n]; 
+		for (int i=0,j=0;j<6*n;i+=3,j+=6) {
+			Apts[i] = xyz[i];
+			Apts[i+1] = xyz[i+1];
+			Apts[i+2] = pts[j];
+		}
+		fwrite(Apts,sizeof(double),3*n,fp);
+		delete[] Apts;
+		fclose(fp);
+	}
 }
 
 /** Outputs the mesh vertex positions.

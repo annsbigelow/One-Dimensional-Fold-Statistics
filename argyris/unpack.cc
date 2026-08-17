@@ -40,7 +40,8 @@ int main(int argc,char **argv) {
     }
 
     // Read in the mesh
-    mesh_param par(0.05,0.02,false);
+	const bool r_all_dofs=true;
+    mesh_param par(0.05,0.02,false,r_all_dofs,false);
     mesh *mp;
 	np=atoi(argv[argc-1]);
     if(argc==6) {
@@ -58,7 +59,8 @@ int main(int argc,char **argv) {
         size_t l=strlen(argv[2])+16;
         char *f_topo=new char[2*l],*f_pts=f_topo+l;
         sprintf(f_topo,"%s/topo",argv[2]);
-        sprintf(f_pts,"%s/pts.%d",argv[2],fnum);
+        if(r_all_dofs) sprintf(f_pts,"%s/pts_Argyris.%d",argv[2],fnum);
+		else sprintf(f_pts,"%s/pts.%d",argv[2],fnum);
         mp=new mesh(par,f_topo,f_pts);
 
         // Free the dynamically allocated memory

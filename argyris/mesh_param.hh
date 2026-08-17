@@ -1,0 +1,73 @@
+#ifndef MESH_PARAM_HH
+#define MESH_PARAM_HH
+
+struct mesh_param {
+    /** The spring constant. */
+    const double K;
+    /** The drag constant. */
+    const double drag;
+    /** The dashpot damping constant. */
+    const double B;
+    /** The edge bending force. */
+    const double kappa;
+    /** The effective diameter of repulsive potential. */
+    double sigma;
+	/** The weak shrink spring constant. */
+	const double ks;
+    /** Whether to include dashpots. */
+    const bool dashpot;
+    /** Whether to use the bendable sheet model, which also has connections
+     * between triangle edges. */
+    const bool bsheet_model;
+    /** Whether to add pairwise repulsion for contact avoidance. */
+    const bool repulsion;
+	/** The diameter of repulsion spheres. */
+	const double diam;
+    /** Whether to fix the mesh boundaries. */
+    const bool fix_boundary;
+	/** Whether to include weak shrink springs for wrinkling. */
+	const bool shrink;
+	/** The side edge length. */
+	const double sed;
+
+	/** FEM Parameters */
+	/** The density of the sheet in the reference configuration */
+	const double rho;
+	/** Lame parameter lambda. */
+	const double lambda;
+	/** Lame parameter mu. */
+	const double mu_fem;
+	/** Whether to read in all DOFs from a mesh file. */
+	const bool r_all_dofs;
+	/** Whether to write out all DOFs from a mesh file. */
+	const bool wr_all_dofs;
+
+    mesh_param(double K_,double drag_,bool fix_boundary_,bool r_all_dofs_,bool wr_all_dofs_) : K(K_), drag(drag_),
+        B(0.),  kappa(0.), sigma(0.), ks(0.), dashpot(false),
+        bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
+		rho(1.), lambda(7.5), mu_fem(3.75), r_all_dofs(r_all_dofs_),wr_all_dofs(wr_all_dofs_) {}
+    mesh_param(double K_,double drag_,double B_,bool fix_boundary_) : K(K_), drag(drag_),
+        B(B_), kappa(0.), sigma(0.), ks(0.), dashpot(true),
+        bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
+		rho(1.), lambda(7.5), mu_fem(3.75), r_all_dofs(false),wr_all_dofs(false) {}
+    mesh_param(double K_,double drag_,double B_,double kappa_,bool fix_boundary_) : K(K_), drag(drag_),
+        B(B_), kappa(kappa_), sigma(0.), ks(0.), dashpot(true),
+        bsheet_model(true), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
+		rho(1.), lambda(7.5), mu_fem(3.75), r_all_dofs(false),wr_all_dofs(false) {}
+    mesh_param(double K_,double drag_,double kappa_,bool dashpot_,
+			bool fix_boundary_,bool r_all_dofs_,bool wr_all_dofs_) : 
+		K(K_), drag(drag_), B(0.), kappa(kappa_), sigma(0.), ks(0.), dashpot(dashpot_),
+        bsheet_model(false), repulsion(false), diam(0.), fix_boundary(fix_boundary_), shrink(false), sed(0.),
+		rho(1.), lambda(7.5), mu_fem(3.75), r_all_dofs(r_all_dofs_),wr_all_dofs(wr_all_dofs_) {}
+    mesh_param(double K_,double drag_,double B_,double kappa_,double diam_) : K(K_), drag(drag_),
+        B(B_), kappa(kappa_), sigma(sqrt(3)), ks(0.), dashpot(true),
+        bsheet_model(true), repulsion(true), diam(diam_), fix_boundary(false), shrink(false), sed(0.), rho(1.),
+		lambda(7.5), mu_fem(3.75), r_all_dofs(false),wr_all_dofs(false) {}
+	mesh_param(double K_,double drag_,double B_,double kappa_,
+		bool fix_boundary_,bool shrink_,double diam_,double sed_) : 
+		K(K_), drag(drag_), B(B_), kappa(kappa_), sigma(0.), ks(.001), dashpot(true), bsheet_model(true), 
+		repulsion(false), diam(diam_), fix_boundary(fix_boundary_), shrink(shrink_), sed(sed_), rho(1.),
+		lambda(7.5), mu_fem(3.75), r_all_dofs(false),wr_all_dofs(false) {}
+};
+
+#endif

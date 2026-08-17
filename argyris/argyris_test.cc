@@ -7,7 +7,9 @@
 
 int main() {
 	// Create mesh and initialize acceleration
-	mesh_param par(0.05, 0.03, 0.001, false, false);
+	const bool r_all_dofs=false;
+	const bool wr_all_dofs=true;
+	mesh_param par(0.05, 0.02, 0.001, false,false,r_all_dofs,wr_all_dofs);
 	mesh_rk4 mp(par, "sh48_3x3.bin");
 
 	// Centralize and scale the mesh
@@ -24,8 +26,7 @@ int main() {
 
 	// Apply perturbation in z-direction
 	mp.linear_gradient();
-
-	mp.debug();
+	mp.mesh_print_last_step();
 
 	// Solve!
 	//mp.solve_fixed(1e-2, 2, true);

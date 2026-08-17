@@ -39,7 +39,7 @@ mesh::mesh(mesh_param &mp,const char* f_topo,const char* f_pts) :
 
     // Read in the vertex positions
     fp=safe_fopen(f_pts,"rb");
-    read_positions(fp);
+	read_positions(fp);
     fclose(fp);
 
 	// Seed the RNG
@@ -800,6 +800,7 @@ void mesh::buildC() {
 			C[21*i+j] += D[24*i+k]*E[21*k+j];
 
 		for (int i=0;i<441;i++) C_glob[441*tri+i]=C[i];
+		
 		top+=5; tri+=1;
 	}
 }
@@ -922,9 +923,9 @@ void mesh::print_triangle_table() {
 }
 
 void mesh::print_pts(double *pt_array) {
-	for (int i = 0; i < n; i++) {
-	for (int k=0; k<6;k++) {
-		double* pt = pt_array + 6 * i;
+	for (int i=0;i<n;i++) {
+	for (int k=0;k<6;k++) {
+		double *pt=pt_array+6*i;
 		printf("%g ",pt[k]);
 	}
 	printf("\n");

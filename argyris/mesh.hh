@@ -7,7 +7,7 @@
 
 #include "../crumple/common.hh"
 #include "../crumple/rk4.hh"
-#include "../crumple/mesh_param.hh"
+#include "mesh_param.hh"
 #include "../crumple/ext_potential.hh"
 #include "../crumple/p_grid.hh"
 #include "pre_comps.hh"
@@ -144,9 +144,12 @@ class mesh : public mesh_param {
 		void local_Kq_multiply(int tri, int Ti);
 		void get_argv(int* argv, int v[3], int ed[3]);
 		void tri_geo(int v[3], double* vb, double* l, double* na);
-		void debug();
-		void compute_gradients(int j, double phi_refx[21], double phi_refy[21],
-			double detF, double B[4], int tri, double& dx, double& dy);
+		void check_dofs();
+		double hatL(int k,int mode,int d,int l);
+		void khat2k(double B[4],double x1,double y1,double xhat,double yhat,double &x,double &y);
+		void k2khat(double B[4],double detF,double x1,double y1,
+					double &xhat,double &yhat,double x,double y);
+		void nhat2n(double B[4],double detF,double nhatx,double nhaty,double &nx,double &ny);
 		/** Initial displacement functions */
 		void Gauss_displacement();
 		void linear_gradient();
