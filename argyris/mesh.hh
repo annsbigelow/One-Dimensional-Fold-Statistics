@@ -154,6 +154,7 @@ class mesh : public mesh_param {
 		void Gauss_displacement();
 		void linear_gradient();
 		void const_displacement();
+		void parabola();
 		/** FEM Matrix Assembly functions */
 		void setup_fem_matrices();
 		void buildC();

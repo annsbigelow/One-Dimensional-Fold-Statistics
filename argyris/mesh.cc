@@ -828,6 +828,7 @@ void mesh::Gauss_displacement() {
 	for (int i=0;i<ns;i++) seen[i]=0;
 
 	// Initialize normal derivatives
+	double vb[6],l[3],na[6];
 	int *top=tom;
 	for (int Ti=0;Ti<n;Ti++)
 	while (top<to[Ti+1]) {
@@ -836,23 +837,11 @@ void mesh::Gauss_displacement() {
 		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
-		// Sides of the triangle
-		double vb[6]={	x2-x1, y2-y1,
-						x3-x1, y3-y1,
-						x3-x2, y3-y2	};
-		// Lengths of each side
-		double l[3]={	sqrt(vb[0]*vb[0]+vb[1]*vb[1]),
-						sqrt(vb[2]*vb[2]+vb[3]*vb[3]),
-						sqrt(vb[4]*vb[4]+vb[5]*vb[5])	};
+		tri_geo(v,vb,l,na); 
 		// Midpoints of sides
 		double m[6]={	(x2+x1)/2, (y2+y1)/2,
 						(x3+x1)/2, (y3+y1)/2,
 						(x3+x2)/2, (y3+y2)/2 };
-		// Normal vectors
-		double na[6]={	-vb[1]/l[0], vb[0]/l[0],
-						-vb[3]/l[1], vb[2]/l[1],
-						-vb[5]/l[2], vb[4]/l[2] };
-
 		int j=0;
 		for (int i=0;i<3;i++) {
 			if (!seen[ed[i]]) {
@@ -863,6 +852,7 @@ void mesh::Gauss_displacement() {
 		}
 		top+=5;
 	}
+	delete[] seen;
 }
 
 void mesh::linear_gradient() {
@@ -906,6 +896,55 @@ void mesh::linear_gradient() {
 void mesh::const_displacement() {
 	const float eps = .001;
 	for (int i=0;i<n;i++) pts[6*i]+=eps;
+}
+
+/** Arrange the mesh to take a parabolic shape */
+void mesh::parabola() {
+	const double eps=0.001;
+	// Initialize function values and gradients at all nodes
+	for(int i=0;i<n;i++) {
+		double x=xyz[3*i], y=xyz[3*i+1];
+		// Displace the z-component
+		pts[6*i]+=eps*(x*x + x*y + y*y);
+		// First derivatives
+		pts[6*i+1]+=eps*(2*x+y);
+		pts[6*i+2]+=eps*(2*y+x);
+		// Second derivatives
+		pts[6*i+3]+=eps*2;
+		pts[6*i+4]+=eps;
+		pts[6*i+5]+=eps*2;
+	}
+
+	// Keep track of edges which have been seen already
+	int *seen = new int[ns];
+	for (int i=0;i<ns;i++) seen[i]=0;
+
+	// Initialize normal derivatives
+	double vb[6],l[3],na[6];
+	int *top=tom;
+	for (int Ti=0;Ti<n;Ti++)
+	while (top<to[Ti+1]) {
+		int v[3]={Ti,*top,top[1]};
+		int ed[3]={top[2],top[4],top[3]};
+		double *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		tri_geo(v,vb,l,na);
+		// Midpoints of sides
+		double m[6]={	(x2+x1)/2, (y2+y1)/2,
+						(x3+x1)/2, (y3+y1)/2,
+						(x3+x2)/2, (y3+y2)/2 };
+		int j=0;
+		for (int i=0;i<3;i++) {
+			if (!seen[ed[i]]) {
+				pts[6*n+ed[i]] += eps*(na[j]*(2*m[j]+m[j+1]) + na[j+1]*(2*m[j+1]+m[j]));
+				seen[ed[i]]=1;
+			}
+			j+=2;
+		}
+		top+=5;
+	}
+	delete[] seen;
 }
 
 void mesh::arr_zeros(double *A,int size) {
