@@ -138,6 +138,7 @@ class mesh : public mesh_param {
 		bool inside(int i,int j,int nt,int ny,int sub);
 		/** Small FEM helper functions */
 		void build_matrices();
+		void setup_fem();
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		void Kq_multiply(double* in);
@@ -145,11 +146,13 @@ class mesh : public mesh_param {
 		void get_argv(int* argv, int v[3], int ed[3]);
 		void tri_geo(int v[3], double* vb, double* l, double* na);
 		void check_dofs();
+		void check_normals();
 		double hatL(int k,int mode,int d,int l);
 		void khat2k(double B[4],double x1,double y1,double xhat,double yhat,double &x,double &y);
 		void k2khat(double B[4],double detF,double x1,double y1,
 					double &xhat,double &yhat,double x,double y);
 		void nhat2n(double B[4],double detF,double nhatx,double nhaty,double &nx,double &ny);
+		void invert_C(int tri,double C_inv[441],double C[441]);
 		/** Initial displacement functions */
 		void Gauss_displacement();
 		void linear_gradient();
@@ -170,6 +173,7 @@ class mesh : public mesh_param {
 						double &physx,double &physy,double &soln);
 		void triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3]);
 		void fill_ed_vals(double *pt,int tri,int v[3],int ed[3],int i,int j);
+		int get_fine_global_idx(int T[6],int i,int j,int nn,bool &og);
 		
 		/** Quadrature helper functions */
 		void setup_quad_matrices();
@@ -210,7 +214,8 @@ class mesh : public mesh_param {
             fclose(fp);
         }
         void draw_mesh_gnuplot(FILE *fp=stdout);
-		void draw_mesh_gnuplot_deluxe(FILE *fp=stdout);
+		void draw_48mesh_gnuplot_curvy(FILE *fp=stdout);
+		void draw_48mesh_gnuplot_deluxe(FILE* fp = stdout);
         inline void draw_mesh_pov(const char *filename,bool normals=true) {
             FILE *fp=safe_fopen(filename,"w");
             draw_mesh_pov(fp);

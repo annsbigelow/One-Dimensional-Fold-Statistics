@@ -5,12 +5,12 @@
 #include "mesh.hh"
 
 int main(int argc,char **argv) {
-
     // Check for the correct number of command-line arguments
-    if(argc<5||argc>6) {
-        fputs("Syntax: ./unpack <mode> <directory> <frame> <output_filename> <partitions>\n"
-              "        ./unpack <mode> <input_filename> <output_filename> <partitions>\n\n"
+    if(argc<6||argc>7) {
+        fputs("Syntax: ./unpack <mode> <directory> <frame> <output_filename> <partitions> <read mode>\n"
+              "        ./unpack <mode> <input_filename> <output_filename> <partitions> <read mode>\n\n"
 			  "Partitions: number of added points on an edge for curvy visualization, plus one.\n\n"
+			  "Read mode: (1/0) whether the input file includes all Argyris DOFs.\n\n"
               "Mode: \"msh\" for POV-Ray mesh (with normals)\n"
               "      \"mtr\" for POV-Ray mesh (with flat triangles, no normals)\n"
               "      \"gnu\" for Gnuplot mesh\n"
@@ -18,7 +18,8 @@ int main(int argc,char **argv) {
               "      \"sph\" for POV-Ray spheres\n"
               "      \"txt\" for plain text vertices\n"
               "      \"edg\" for plain text edge table\n"
-			  "      \"curvy\" for refined Gnuplot mesh\n\n"
+			  "      \"cur\" for refined Gnuplot mesh via extra edge points \n"
+			  "		 \"del\" for full refined Gnuplot mesh\n\n"
               "If the output filename is \"-\" then the data will be written to standard\n"
               "output\n",stderr);
         return 1;
@@ -33,18 +34,20 @@ int main(int argc,char **argv) {
     else if(strcmp(argv[1],"sph")==0) mode=4;
     else if(strcmp(argv[1],"txt")==0) mode=5;
     else if(strcmp(argv[1],"edg")==0) mode=6;
-	else if(strcmp(argv[1],"curvy")==0) mode=7;
+	else if(strcmp(argv[1],"cur")==0) mode=7;
+	else if(strcmp(argv[1],"del")==0) mode=8;
     else {
         fprintf(stderr,"Mode type \"%s\" not known\n",argv[1]);
         return 1;
     }
-
+	
     // Read in the mesh
-	const bool r_all_dofs=true;
-    mesh_param par(0.05,0.02,false,r_all_dofs,false);
+	const bool r_all_dofs=atoi(argv[argc-1]);
+	const double K=.05,drag=.02;
+    mesh_param par(K,drag,false,r_all_dofs,false);
     mesh *mp;
-	np=atoi(argv[argc-1]);
-    if(argc==6) {
+	np=atoi(argv[argc-2]);
+    if(argc==7) {
 
         // If the are five command line arguments, then look for mesh
         // information and topology separately in an output directory. First,
@@ -66,11 +69,11 @@ int main(int argc,char **argv) {
         // Free the dynamically allocated memory
         delete [] f_topo;
     } else mp=new mesh(par,argv[2]);
-
+	
     // Output the relevant data, checking for when the output filename is "-"
     // to signal that the data should be sent to standard output
-    bool std=strcmp(argv[argc-2],"-")==0;
-    FILE *fp=std?stdout:safe_fopen(argv[argc-2],"w");
+    bool std=strcmp(argv[argc-3],"-")==0;
+    FILE *fp=std?stdout:safe_fopen(argv[argc-3],"w");
 	mp->np=np;
     switch(mode) {
         case 0: mp->draw_mesh_pov(fp);break;
@@ -80,7 +83,8 @@ int main(int argc,char **argv) {
         case 4: mp->draw_nodes_pov(fp);break;
         case 5: mp->draw_nodes(fp);break;
         case 6: mp->edge_diagnostic(fp);
-		case 7: mp->draw_mesh_gnuplot_deluxe(fp);break;
+		case 7: mp->draw_48mesh_gnuplot_curvy(fp);break;
+		case 8: mp->draw_48mesh_gnuplot_deluxe(fp);break;
     }
     if(!std) fclose(fp);
     else fflush(stdout);

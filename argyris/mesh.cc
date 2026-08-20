@@ -86,7 +86,7 @@ void mesh::setup_springs() {
 
     // Compute the number of triangles
     ntri=0;
-    for(int i=0;i<n;i++)
+    for(i=0;i<n;i++)
         ntri+=(ncn[i]&bflag)==0?ncn[i]:ncn[i]-1;
     if(ntri%3!=0) {
         fputs("Triangle count should be divisible by 3",stderr);
@@ -98,7 +98,7 @@ void mesh::setup_springs() {
     to=new int*[n+1];
     tom=new int[5*ntri];
     int *top=tom;edp=edm;
-    for(int i=0;i<n;i++) {
+    for(i=0;i<n;i++) {
         to[i]=top;
 
         // Enumerate triangles between successive edge pairs
@@ -126,20 +126,22 @@ void mesh::setup_springs() {
         }
         edp++;
     }
-
-	// Define the global normal directions
-	global_normals();
-	// Build change of bases matrices
-	buildC();
+	to[n]=top;	
 }
 
 void mesh::build_matrices() {
 	quadrature=false;
-
 	if (quadrature)
 		setup_quad_matrices();
 	else
 		setup_fem_matrices();
+}
+
+void mesh::setup_fem() {
+	// Define the global normal directions
+	global_normals();
+	// Build change of bases matrices
+	buildC();
 }
 
 int mesh::edge_lookup(int i,int j) {
@@ -562,7 +564,7 @@ void mesh::assemble_M() {
 	Msolver.factorize(M_sp);
 	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
-		//exit(1);
+		exit(1);
 	}
 	printf("Mass matrix factorization finished.\n");
 }
@@ -586,10 +588,10 @@ void mesh::assemble_K() {
 			double B[4]={ vb[0],vb[2],vb[1],vb[3] };
 			double detF = vb[0]*vb[3] - vb[2]*vb[1];
 			double fac = 1/(detF*detF);
-			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
+			double prefac = kappa*detF;
 			if (detF <= 1e-13) {
 				printf("Error: detF=%g < 0. Triangle %d.\n",detF,tri);
-				//exit(1);
+				exit(1);
 			}
 
 			get_argv(argv,v,ed);
@@ -615,6 +617,25 @@ void mesh::assemble_K() {
 						}
 					triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
 				}
+			/*double The0[3]={B[3]*B[3]*fac,-2*B[2]*B[3]*fac,B[2]*B[2]*fac};
+			double The2[3]={B[1]*B[1]*fac,-2*B[0]*B[1]*fac,B[0]*B[0]*fac};
+
+			double sumnq;
+			for(int i=0;i<21;i++) for(int j=0;j<21;j++) {
+				double sumlm=0.;
+				for(int l=0;l<21;l++) for(int m=0;m<21;m++) {
+					double C_prod=signs[l]*signs[m]*C_glob[441*tri+21*l+i]*C_glob[441*tri+21*m+j];
+					sumnq=0.;
+					for(int nn=0;nn<3;nn++) for(int q=0;q<3;q++) {
+						double val=The0[nn]*The0[q]+The0[nn]*The2[q]+The2[nn]*The0[q]+The2[nn]*The2[q];
+						val*=F[9*(21*l+m)+3*nn+q];
+						sumnq+=val;
+					}
+					sumlm+=sumnq*C_prod;
+				}
+				triplets.push_back(Eigen::Triplet<double>(argv[i],argv[j],prefac*sumlm));
+			}*/
+
 			top+=5; tri+=1;
 		}
 	// Convert triplets list to SparseMatrix.
@@ -644,7 +665,6 @@ void mesh::assemble_K() {
 /** Define the global normal orientations */
 void mesh::global_normals() {
 	normals = new double[2*ns];
-
 	// Keep track of edges which have been seen already
 	int *seen = new int[ns];
 	for (int i=0;i<ns;i++) seen[i]=0;
@@ -657,16 +677,18 @@ void mesh::global_normals() {
 		int ed[3]={top[2],top[4],top[3]};
 		int v[3]={Ti,*top,top[1]};
 		tri_geo(v, vb, l, na);
-
-		for (int i=0;i<3;i++) 
+		
+		for (int i=0;i<3;i++) {
 		if (!seen[ed[i]]) {
 			normals[2*ed[i]]=na[2*i];
 			normals[2*ed[i]+1]=na[2*i+1];
 			// Mark this edge as "seen"
 			seen[ed[i]]=1;
 		}
+		}
 		top+=5;
 	}
+	
 	delete[] seen;
 }
 
@@ -898,7 +920,7 @@ void mesh::const_displacement() {
 	for (int i=0;i<n;i++) pts[6*i]+=eps;
 }
 
-/** Arrange the mesh to take a parabolic shape */
+/** Initialize the mesh to take a parabolic shape */
 void mesh::parabola() {
 	const double eps=0.001;
 	// Initialize function values and gradients at all nodes

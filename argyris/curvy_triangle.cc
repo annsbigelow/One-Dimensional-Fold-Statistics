@@ -5,8 +5,8 @@
 
 #include <Eigen/Dense>
 
-/** Check that the physical Argyris basis functionals are "nodal" -- in the sense that they are
-	1 and 0 when they should be. */
+/** Check that the physical Argyris basis functionals are "nodal" -- 
+	in the sense that they are 1 and 0 when they should be. */
 void mesh::check_dofs() {
 	double bigL[ntri][21][21];
 	std::ofstream outputFile("L.csv");
@@ -20,21 +20,8 @@ void mesh::check_dofs() {
 			for(int a=0;a<21;a++) for(int b=0;b<21;b++) L[a][b]=0;
 
 			// Invert C using Eigen
-			double C[441];
-			for(int i=0;i<21;i++){
-				for(int j=0;j<21;j++) {
-					C[21*i+j]=C_glob[441*tri+21*i+j];
-				}
-			}
-			Eigen::Map<Eigen::Matrix<double,21,21,Eigen::RowMajor> > C_eig(C);
-			Eigen::FullPivLU<Eigen::Matrix<double,21,21,Eigen::RowMajor> > lu(C_eig);
-			if (!lu.isInvertible()) {
-				printf("Error: Triangle %d change of bases matrix is not invertible.\n",tri);
-				exit(1);
-			}
-			Eigen::Matrix<double,21,21,Eigen::RowMajor> Ce_inv = C_eig.inverse();
-			double C_inv[441];
-			std::memcpy(C_inv, Ce_inv.data(), 441*sizeof(double));
+			double C_inv[441], C[441];
+			invert_C(tri,C_inv,C);
 			
 			// Fill L_i(N_j)
 			int m,l,mode,d,k;
@@ -157,6 +144,69 @@ void mesh::check_dofs() {
 	printf("Reference DOF matrix outputted to .csv file.\n");
 }
 
+void mesh::check_normals() {
+	double mrefx[3]={0.5,0,0.5}, mrefy[3]={0,0.5,0.5};
+	
+	// Debug
+	std::ofstream Cfile("C0.csv");
+
+	int *top=tom,tri=0;
+	double vb[6],l[3],na[6];
+	for(int Ti=0;Ti<n;Ti++) while(top<to[Ti+1]) {
+		printf("Triangle %d\n\n",tri);
+		int v[3] = { Ti,*top,top[1] };
+		tri_geo(v,vb,l,na);
+		double B[4]={ vb[0],vb[2],vb[1],vb[3] };
+		double detF = vb[0]*vb[3] - vb[2]*vb[1];
+
+		double xhat, yhat;
+		for(int e=0;e<3;e++) { // Loop through edges
+			printf("Edge %d\n",e);
+			printf("Normal (%g,%g)\n",na[2*e],na[2*e+1]);
+			xhat=mrefx[e]; yhat=mrefy[e];
+			double dx[21],dy[21];
+			arg_grads(xhat,yhat,dx,dy);
+			for(int j=0;j<21;j++) {
+				double sum=0.;
+				for(int k=0;k<21;k++) { // Loop through reference basis functions
+					double val= na[2*e]*(B[3]*dx[k]-B[2]*dy[k]) + 
+								na[2*e+1]*(-B[1]*dx[k]+B[0]*dy[k]);
+					val*=C_glob[441*tri+21*k+j]/detF;
+					sum+=val;
+					if(tri==0&&e==0) {
+						Cfile << C_glob[441*tri+21*j+k] << " ";
+					}
+				}
+				if(tri==0&&e==0) Cfile << std::endl;
+
+				if(std::abs(sum)<1e-13) sum=0;
+				printf("%g ",sum);
+			}
+			printf("\n\n");
+		}
+
+		top+=5; tri++;
+	}
+	Cfile.close();
+}
+
+void mesh::invert_C(int tri,double C_inv[441],double C[441]) {
+	// Invert C using Eigen
+	for(int i=0;i<21;i++){
+		for(int j=0;j<21;j++) {
+			C[21*i+j]=C_glob[441*tri+21*i+j];
+		}
+	}
+	Eigen::Map<Eigen::Matrix<double,21,21,Eigen::RowMajor> > C_eig(C);
+	Eigen::FullPivLU<Eigen::Matrix<double,21,21,Eigen::RowMajor> > lu(C_eig);
+	if (!lu.isInvertible()) {
+		printf("Error: Triangle %d change of bases matrix is not invertible.\n",tri);
+		exit(1);
+	}
+	Eigen::Matrix<double,21,21,Eigen::RowMajor> Ce_inv = C_eig.inverse();
+	std::memcpy(C_inv, Ce_inv.data(), 441*sizeof(double));
+}
+
 /** Computes \hat L(\hat N_l) for a specified reference functional \hat L.
 *	\param[in] k=0,1,2 the index of the vertex or the edge.
 *	\param[in] mode vertex value/gradient/Hessian or edge-normals
@@ -210,10 +260,135 @@ void mesh::khat2k(double B[4],double x1,double y1,double xhat,double yhat,double
 }
 
 /** A deluxe version of draw_mesh_gnuplot(), allowing for 
-*	curvy triangle visualization by finding the solution along the edges of the triangles. */
-void mesh::draw_mesh_gnuplot_deluxe(FILE *fp) {
+*	curvy triangle visualization by finding the solution at extra points on the triangles.
+	Works for a square, 4-8 mesh. */
+void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	// Set up tables to be able to access eo[], used in edge_lookup()
 	setup_springs();
+	// Build the change-of-basis FEM matrix, used to calculate the solution at new points
+	setup_fem();
+	int nx=static_cast<int>(sqrt(n)); // TODO - nx and ny may be different.
+	const int nn = nx + (np-1)*(nx-1);
+	char buf[50],buf1[50];
+
+	const float s=1; // TODO - allow user to choose set side length
+
+	// Call sheet_gen in order to set up connection info for refined mesh
+	sprintf(buf,"./sheet_gen rec48 %f %d %d",s,nn,nn);
+	mesh_param par(K,drag,false,false,false);
+	std::system(buf);
+	sprintf(buf1,"sh48_%dx%d.bin",nn,nn);
+	mesh *mp_deluxe=new mesh(par,buf1);
+
+	// Create an array to store (x,y,z) vals at each refined grid point
+	const int n_del=(np-2)*(np-1)*ntri/2 + (np-1)*ns + n;
+	if(n_del!=mp_deluxe->n) {
+		printf("Error: total refined points don't match.\n"); 
+		printf("Calculated n: %d, actual n: %d\n",n_del,mp_deluxe->n);
+		exit(1);
+	}
+	double *dvals=new double[3*n_del];
+	// Keep track of deluxe points that have been "seen" to avoid re-calculating a solution val
+	bool *seen=new bool[n_del];
+	for(int i=0;i<n_del;i++) seen[i]=0;
+
+	// Go through each original triangle to calculate the solution at deluxe points
+	int *top=tom,tri=0;
+	bool og;
+	for(int Ti=0;Ti<n;Ti++) while(top<Ti[to+1]) {
+		int v[3] = { Ti,*top,top[1] }, 
+			ed[3] = { top[2],top[4],top[3] }, T[6];
+		double  *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
+				*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
+				*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
+		double B[4]={ x2-x1,x3-x1,y2-y1,y3-y1 };
+
+		// The integer coordinates of the triangle vertices on the coarse mesh
+		for(int k=0;k<3;k++) {
+			T[2*k]=v[k]%nx;
+			T[2*k+1]=v[k]/nx;
+		}
+		
+		// Cycle through integer coordinates of deluxe points overlaid on the triangle
+		for(int j=0;j<=np;j++) for(int i=0;i<=np-j;i++) {
+				int g=get_fine_global_idx(T,i,j,nn,og);
+				// If this is an unseen new point, use FEM theory to calculate the solution there
+				if(!seen[g]&&!og) {
+					double x,y,z;
+					calculate_q(v,ed,tri,i,j,x,y,z);
+					dvals[3*g]=x; dvals[3*g+1]=y; dvals[3*g+2]=z;
+					seen[g]=1;
+				}
+				// If this is an unseen original point, record the coordinates
+				else if(!seen[g]&&og) {
+					int k;
+					double x = (B[0]*i + B[1]*j)/np + x1,
+						   y = (B[2]*i + B[3]*j)/np + y1;
+					if(i==0&&j==0) k=0;
+					else if(i==np&&j==0) k=1;
+					else if(i==0&&j==np) k=2;
+					else {
+						printf("Error recognizing a point on the coarse mesh\n");
+						printf("i=%d, j=%d, tri=%d, g=%d\n",i,j,tri,g);
+						exit(1);
+					}
+					dvals[3*g]=x; dvals[3*g+1]=y; dvals[3*g+2]=pts[6*v[k]];
+					seen[g]=1;
+				}
+		}
+		top+=5; tri++;
+	}
+
+	// Access the refined mesh connection info
+	mp_deluxe->setup_springs();
+	int *edp=mp_deluxe->edm, *edp2,j;
+	// Draw paths through the refined mesh
+	for(int i=0;i<n_del;i++) while(edp<mp_deluxe->ed[i+1]) {
+		 // If this edge hasn't been marked, then trace a path starting from
+         // this edge
+        if((*edp&bflag)==0) {
+
+            // Mark and print this edge
+            j=mp_deluxe->edge_mark(i,edp);
+            fprintf(fp,"%g %g %g\n%g %g %g\n",
+                        dvals[3*i],dvals[3*i+1],dvals[3*i+2],
+                        dvals[3*j],dvals[3*j+1],dvals[3*j+2]);
+
+            // Follow and print as many unmarked edges as possible
+            while(mp_deluxe->find_unmarked(j,edp2)) {
+                j=mp_deluxe->edge_mark(j,edp2);
+                fprintf(fp,"%g %g %g\n",dvals[3*j],dvals[3*j+1],dvals[3*j+2]);
+            }
+            fputs("\n\n",fp);
+        }
+		edp++;
+	}
+	// Clear the markers
+    for(edp=mp_deluxe->edm;edp<edm+mp_deluxe->nc;) *(edp++)&=~bflag;
+
+	delete[] dvals; delete[] seen; delete mp_deluxe;
+}
+
+/** Calculates the global index of a point on a deluxe mesh. 
+	\param[in] T[] the integer coordinates of the triangle vertices on the coarse mesh.
+	\param[in] i,j the integer coordinates of the deluxe point with respect to the reference 
+				element. 
+	\param[in] nn the number of points on the deluxe mesh in one direction. 
+	\param[in] og whether this point is also a point on the coarse mesh. */
+int mesh::get_fine_global_idx(int T[6],int i,int j,int nn,bool &og) {
+	int x = (np-i-j)*T[0] + i*T[2] + j*T[4];
+	int y = (np-i-j)*T[1] + i*T[3] + j*T[5];
+	if(x%np==0&&y%np==0) og=true; else og=false;
+	return nn*y+x;
+}
+
+/** A deluxe version of draw_mesh_gnuplot(), allowing for curvy triangle 
+	visualization by finding the solution along the edges of the triangles. */
+void mesh::draw_48mesh_gnuplot_curvy(FILE *fp) {
+	// Set up tables to be able to access eo[], used in edge_lookup()
+	setup_springs();
+	// Build the change-of-basis FEM matrix, used to calculate the solution at new points
+	setup_fem();
 	// Calculate the solution at each new edge point
 	interpolate();
 
@@ -278,7 +453,7 @@ void mesh::draw_mesh_gnuplot_deluxe(FILE *fp) {
 /** Solves for the solution values at the new edge points. */
 void mesh::interpolate() {
 	int *new_pts=new int[3*(np-1)]; // Contiguous storage of new points on one triangle
-
+	
 	edp_vals=new double*[(np-1)*ns]; // Pointers to new (x,y,z) points
 	ed_vals=new double[3*(np-1)*ns]; // Memory for new points
 
@@ -350,11 +525,10 @@ void mesh::triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3]) {
 *	\return pt the (x,y,z) values.
 */
 void mesh::fill_ed_vals(double *pt,int tri,int v[3],int ed[3],int i,int j) {
-	double physx, physy, soln;
+	double x,y,z;
 	// Calculate the solution at the new point
-	calculate_q(v,ed,tri,i,j,physx,physy,soln);
-	// (x,y,z) values for added point
-	pt[0]=physx; pt[1]=physy; pt[2]=soln;
+	calculate_q(v,ed,tri,i,j,x,y,z);
+	pt[0]=x; pt[1]=y; pt[2]=z;
 }
 
 /** Uses Argyris basis functions to calculate the solution 
@@ -374,8 +548,10 @@ void mesh::calculate_q(int v[3],int ed[3],int tri,int i, int j,
 	double B[4]={ x2-x1,x3-x1,y2-y1,y3-y1 };
 	double detF = B[0]*B[3] - B[2]*B[1];
 	// The (x,y) coordinates on the physical triangle
-	physx = ((np-i-j)*x1 + i*x2 + j*x3)/np;
-	physy = ((np-i-j)*y1 + i*y2 + j*y3)/np;
+	/*physx = ((np-i-j)*x1 + i*x2 + j*x3)/np;
+	physy = ((np-i-j)*y1 + i*y2 + j*y3)/np;*/
+	physx = (B[0]*i+B[1]*j)/np + x1;
+	physy = (B[2]*i+B[3]*j)/np + y1;
 	// Transform the physical coordinates to reference
 	double refx,refy;
 	k2khat(B,detF,x1,y1,refx,refy,physx,physy);
