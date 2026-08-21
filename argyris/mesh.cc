@@ -533,8 +533,7 @@ void mesh::assemble_M() {
 				double sum=0.;
 				for (int a=0;a<21;a++)
 				for (int b=0;b<21;b++) {
-					//sum += C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J]*S[21*a+b];
-					sum += signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J]*S[21*a+b];
+					sum += signs[I]*signs[J]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J]*S[21*a+b];
 				}
 				triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],mass*sum));
 			}
@@ -609,8 +608,7 @@ void mesh::assemble_K() {
 					double HaHb=0.;
 					for (int a=0;a<21;a++)
 						for (int b=0;b<21;b++) {
-							//double C_prod = C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
-							double C_prod=signs[a]*signs[b]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
+							double C_prod=signs[I]*signs[J]*C_glob[441*tri+21*a+I]*C_glob[441*tri+21*b+J];
 							for (int r=0;r<3;r++)
 								for (int s=0;s<3;s++)
 									HaHb += C_prod*The[r]*The[s]*F[9*(21*a+b)+3*r+s];
@@ -655,11 +653,14 @@ void mesh::assemble_K() {
 	}
 	outputFile.close();
 
-	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
-	if (llt.info()==Eigen::NumericalIssue) {
-		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
-		//exit(1);
-	}
+	Eigen::LLT<Eigen::MatrixXd> llt_dense(K_dense);
+	if (llt_dense.info() == Eigen::Success)
+		printf("K is positive definite\n");
+	else
+		printf("K is NOT positive definite\n");
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_dense);
+
+	std::cout << "Smallest eigenvalues:\n" << solver.eigenvalues().head(5) << '\n';
 }
 
 /** Define the global normal orientations */
@@ -808,7 +809,7 @@ void mesh::buildC() {
 						-wa[3],-wa[4],-wa[5], 0,0,0, wa[3],wa[4],wa[5],
 						0,0,0, -wa[6],-wa[7],-wa[8], wa[6],wa[7],wa[8] };
 		for (i=0;i<3;i++) {
-			for (j=0;j<3;j++) E[21*(21+i)+j] = 15*T1[3*i+j]/18;
+			for (j=0;j<3;j++) E[21*(21+i)+j] = 15*T1[3*i+j]/8;
 			for (j=0;j<6;j++) E[21*(21+i)+j+3] = -7*T2[6*i+j]/16;
 			for (j=0;j<9;j++) E[21*(21+i)+j+9] = T3[9*i+j]/32;
 		}

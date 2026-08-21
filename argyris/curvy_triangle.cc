@@ -272,6 +272,8 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	char buf[50],buf1[50];
 
 	const float s=1; // TODO - allow user to choose set side length
+	printf("Note: this script assumes the side lengths are equal to 1.\n"
+			"This should be fixed.\n");
 
 	// Call sheet_gen in order to set up connection info for refined mesh
 	sprintf(buf,"./sheet_gen rec48 %f %d %d",s,nn,nn);
@@ -580,7 +582,7 @@ void mesh::calculate_q(int v[3],int ed[3],int tri,int i, int j,
 	double phys_phi;
 	for (int k=0;k<21;k++) {
 		// Map the basis function back to the physical triangle
-		phys_phi = signs[k]*phys_phi_eval(tri,k,phi_ref);
+		 phys_phi = signs[k]*phys_phi_eval(tri,k,phi_ref);
 		soln += pts[argv[k]]*phys_phi;
 	}
 }
