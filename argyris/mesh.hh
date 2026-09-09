@@ -105,10 +105,6 @@ class mesh : public mesh_param {
 		double *w;
 		/** Number of partitions along an edge for curvy visualization. */
 		int np;
-		/** Pointers to solution values at extra edge points. */
-		double **edp_vals;
-		/** Memory for solution values at extra edge points. */
-		double *ed_vals;
 
         mesh(mesh_param &mp,const char* filename);
         mesh(mesh_param &mp,const char* f_topo,const char* f_pts);
@@ -142,7 +138,6 @@ class mesh : public mesh_param {
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
 		void Kq_multiply(double* in);
-		void local_Kq_multiply(int tri, int Ti);
 		void get_argv(int* argv, int v[3], int ed[3]);
 		void tri_geo(int v[3], double* vb, double* l, double* na);
 		void check_dofs();
@@ -154,7 +149,7 @@ class mesh : public mesh_param {
 		void nhat2n(double B[4],double detF,double nhatx,double nhaty,double &nx,double &ny);
 		void invert_C(int tri,double C_inv[441],double C[441]);
 		/** Initial displacement functions */
-		void Gauss_displacement();
+		void Gauss_displacement(float s, int nx);
 		void linear_gradient();
 		void const_displacement();
 		void parabola();
@@ -165,13 +160,13 @@ class mesh : public mesh_param {
 		void assemble_M();
 		void global_normals();
 		/** Curvy triangle visualization */
-		void interpolate();
+		void interpolate(double **edp_vals,double *ed_vals);
 		void grads(double x,double y,double mx[21],double my[21]);
 		void arg_grads(double x,double y,double dx[21],double dy[21]);
 		double phys_phi_eval(int tri,int j,double phi[21]);
 		void calculate_q(int v[3],int ed[3],int tri,int i, int j,
 						double &physx,double &physy,double &soln);
-		void triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3]);
+		void triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3],double **edp_vals,double *ed_vals);
 		void fill_ed_vals(double *pt,int tri,int v[3],int ed[3],int i,int j);
 		int get_fine_global_idx(int T[6],int i,int j,int nn,bool &og);
 		

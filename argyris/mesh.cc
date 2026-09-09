@@ -1,6 +1,4 @@
 ﻿#include <cstring>
-#include <fstream> //DEBUG
-#include <iostream>//DEBUG
 
 #include "mesh.hh"
 #include "../crumple/vec3.hh"
@@ -65,7 +63,6 @@ mesh::~mesh() {
 
 	// FEM terms
 	delete[] normals; delete[] C_glob;
-	delete[] edp_vals; delete[] ed_vals;
 }
 
 /** Sets up the spring network table and builds FEM matrices. */
@@ -126,7 +123,10 @@ void mesh::setup_springs() {
         }
         edp++;
     }
-	to[n]=top;	
+	to[n]=top;
+
+	normals = new double[2*ns];
+	C_glob = new double[ntri*441];
 }
 
 void mesh::build_matrices() {
@@ -221,18 +221,6 @@ void mesh::assembleM_quad() {
 	// Convert triplets list to SparseMatrix.
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(Mtriplets.begin(),Mtriplets.end());
-	//printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
-
-	// Debug
-	Eigen::MatrixXd M_d(M_sp);
-	std::ofstream outputFile("Mass matrix.csv");
-	for (int i=0;i<M_d.rows();i++) {
-		for (int j=0;j<M_d.cols();j++) {
-			outputFile << M_d(i,j) << " ";
-		}
-		outputFile << std::endl; 
-	}
-	outputFile.close();
 
 	// Factorize sparse matrix using LLT Cholesky factorization
 	Msolver.analyzePattern(M_sp);
@@ -241,7 +229,6 @@ void mesh::assembleM_quad() {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
 	}
-	printf("Mass matrix factorization finished.\n");
 }
 
 /** Performs an integration of two basis functions multiplied together
@@ -352,24 +339,19 @@ void mesh::assembleK_quad() {
 	// Convert triplets list to SparseMatrix.
 	Kd.setFromTriplets(Ktriplets.begin(), Ktriplets.end());
 
-	// Debug
-	std::ofstream outputFile("Stiffness matrix.csv");
 	Eigen::MatrixXd K_dense(Kd);
 	for (int i = 0; i < K_dense.rows(); i++) {
 		for (int j = 0; j < K_dense.cols(); j++) {
-			outputFile << K_dense(i, j) << " ";
 			double diff = abs(K_dense(i, j) - K_dense(j, i));
 			if (diff > 1e-13)
 				printf("Stiffness symmetry break. diff=%g\n", diff);
 		}
-		outputFile << std::endl;
 	}
-	outputFile.close();
 
 	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
 	if (llt.info() == Eigen::NumericalIssue) {
 		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
-		//exit(1);
+		exit(1);
 	}
 }
 
@@ -545,18 +527,6 @@ void mesh::assemble_M() {
 	// Convert triplets list to SparseMatrix.
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
-	//printf("Is the sparse mass matrix compressed? %d\n",M_sp.isCompressed());
-
-	// Debug
-	Eigen::MatrixXd M_d(M_sp);
-	std::ofstream outputFile("Mass matrix.csv");
-	for (int i=0;i<M_d.rows();i++) {
-		for (int j=0;j<M_d.cols();j++) {
-			outputFile << M_d(i,j) << " ";
-		}
-		outputFile << std::endl; 
-	}
-	outputFile.close();
 
 	// Factorize sparse matrix using LLT Cholesky factorization
 	Msolver.analyzePattern(M_sp);
@@ -565,7 +535,6 @@ void mesh::assemble_M() {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
 	}
-	printf("Mass matrix factorization finished.\n");
 }
 
 /** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
@@ -615,57 +584,31 @@ void mesh::assemble_K() {
 						}
 					triplets.push_back(Eigen::Triplet<double>(argv[I],argv[J],prefac*HaHb));
 				}
-			/*double The0[3]={B[3]*B[3]*fac,-2*B[2]*B[3]*fac,B[2]*B[2]*fac};
-			double The2[3]={B[1]*B[1]*fac,-2*B[0]*B[1]*fac,B[0]*B[0]*fac};
-
-			double sumnq;
-			for(int i=0;i<21;i++) for(int j=0;j<21;j++) {
-				double sumlm=0.;
-				for(int l=0;l<21;l++) for(int m=0;m<21;m++) {
-					double C_prod=signs[l]*signs[m]*C_glob[441*tri+21*l+i]*C_glob[441*tri+21*m+j];
-					sumnq=0.;
-					for(int nn=0;nn<3;nn++) for(int q=0;q<3;q++) {
-						double val=The0[nn]*The0[q]+The0[nn]*The2[q]+The2[nn]*The0[q]+The2[nn]*The2[q];
-						val*=F[9*(21*l+m)+3*nn+q];
-						sumnq+=val;
-					}
-					sumlm+=sumnq*C_prod;
-				}
-				triplets.push_back(Eigen::Triplet<double>(argv[i],argv[j],prefac*sumlm));
-			}*/
 
 			top+=5; tri+=1;
 		}
 	// Convert triplets list to SparseMatrix.
 	Kd.setFromTriplets(triplets.begin(), triplets.end());
 
-	// Debug
-	std::ofstream outputFile("Stiffness matrix.csv");
 	Eigen::MatrixXd K_dense(Kd);
 	for (int i=0;i<K_dense.rows();i++) {
 		for (int j=0;j<K_dense.cols();j++) {
-			outputFile << K_dense(i,j) << " ";
 			double diff = abs(K_dense(i,j) - K_dense(j,i));
 			if (diff > 1e-13)
 				printf("Stiffness symmetry break. diff=%g\n", diff);
 		}
-		outputFile << std::endl;
 	}
-	outputFile.close();
 
-	Eigen::LLT<Eigen::MatrixXd> llt_dense(K_dense);
-	if (llt_dense.info() == Eigen::Success)
-		printf("K is positive definite\n");
-	else
-		printf("K is NOT positive definite\n");
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_dense);
-
-	std::cout << "Smallest eigenvalues:\n" << solver.eigenvalues().head(5) << '\n';
+	//std::cout << "Smallest eigenvalues:\n" << solver.eigenvalues().head(5) << '\n';
+	if((solver.eigenvalues().head(5).real().array() < -1e-9).any()) {
+		printf("At least one of the eigenvalues of the stiffness matrix is negative.\n");
+		exit(1);
+	}
 }
 
 /** Define the global normal orientations */
 void mesh::global_normals() {
-	normals = new double[2*ns];
 	// Keep track of edges which have been seen already
 	int *seen = new int[ns];
 	for (int i=0;i<ns;i++) seen[i]=0;
@@ -689,7 +632,6 @@ void mesh::global_normals() {
 		}
 		top+=5;
 	}
-	
 	delete[] seen;
 }
 
@@ -742,8 +684,6 @@ void mesh::get_argv(int* argv, int v[3], int ed[3]) {
 
 // Build change of bases matrices for each triangle
 void mesh::buildC() {
-	C_glob = new double[ntri*441];
-
 	int *top=tom;
 	double D[504], E[504];
 	int tri=0,i,j;
@@ -828,22 +768,26 @@ void mesh::buildC() {
 	}
 }
 
-/** Displace the points in the "z" direction with a Gaussian */
-void mesh::Gauss_displacement() {
-	const double eps=0.001;
+/** Displace the points in the "z" direction with a Gaussian 
+*	\param[in] s the side length of the triangles
+*	\param[in] nx the number of nodes in the x-direction
+*/
+void mesh::Gauss_displacement(float s,int nx) {
+	const double eps0=0.01;
+	const double eps1=4/(s*(nx-1)); // Chosen to complement zero-Dirichlet BC
 	// Initialize function values and gradients at all nodes
 	for(int i=0;i<n;i++) {
 		double x=xyz[3*i], y=xyz[3*i+1];
-		double power = exp(-eps*(x*x+y*y));
+		double power = exp(-eps1*(x*x+y*y));
 		// Displace the z-component
-		pts[6*i]+=-eps+0.02*power;
+		pts[6*i]+=eps0*power;
 		// First derivatives
-		pts[6*i+1]+=-eps*.04*x*power;
-		pts[6*i+2]+=-eps*.04*y*power;
+		pts[6*i+1]+=-eps0*eps1*2*x*power;
+		pts[6*i+2]+=-eps0*eps1*2*y*power;
 		// Second derivatives
-		pts[6*i+3]+=eps*(-.04 + eps*.08*x*x)*power;
-		pts[6*i+4]+=eps*eps*.08*x*y*power;
-		pts[6*i+5]+=eps*(-.04 + eps*.08*y*y)*power;
+		pts[6*i+3]+=-2*eps0*eps1*(1 - 2*eps1*x*x)*power;
+		pts[6*i+4]+=4*eps0*eps1*eps1*x*y*power;
+		pts[6*i+5]+=-2*eps0*eps1*(1 - 2*eps1*y*y)*power;
 	}
 
 	// Keep track of edges which have been seen already
@@ -868,7 +812,7 @@ void mesh::Gauss_displacement() {
 		int j=0;
 		for (int i=0;i<3;i++) {
 			if (!seen[ed[i]]) {
-				pts[6*n+ed[i]] += -eps*.04*exp(-eps*(m[j]*m[j]+m[j+1]*m[j+1]))*(m[j]*na[j]+m[j+1]*na[j+1]);
+				pts[6*n+ed[i]] += -2*eps0*eps1*(m[j]*na[j] + m[j+1]*na[j+1])*exp(-eps1*(m[j]*m[j]+m[j+1]*m[j+1]));
 				seen[ed[i]]=1;
 			}
 			j+=2;
@@ -1000,6 +944,28 @@ void mesh::print_pts(double *pt_array) {
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
+
+	// Pin positions + velocities
+	int *edp=edm;
+	if(fix_boundary) {
+        for(i=0;i<n;i++) {
+            if(ncn[i]&bflag) { // Boundary vertices
+				for(int k=0;k<6;k++) { 
+					in[6*i+k]=0; // Pin all position DOFs
+					in[Adof2+6*i+k]=0; // Pin velocity DOFs
+				}
+            }
+			while(edp<ed[i+1]) { // Boundary edges
+				if(ncn[i]&bflag && ncn[*edp]&bflag) {
+					int l=edge_lookup(i,*edp);
+					in[6*n+l]=0;
+					in[Adof2+6*n+l]=0;
+				}
+				edp++;
+			}
+		}
+    }
+
 	// Add biharmonic term from FEM computations
 	Kq_multiply(in);
 
@@ -1009,27 +975,38 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 		f_sum[i] = Kq[i]-drag*vp[i];
 	// Cholesky direct solver, a = M^-1*f
 	av=Msolver.solve(f_sum);
-	if (Msolver.info()!=Eigen::Success) printf("Matrix solving failed\n");
-	std::memcpy(acc,av.data(),Adof2*sizeof(double));
-
-	// Debug: Calculate the residual
-	/*Eigen::MatrixXd M_d(M_sp);
-	for (int i=0;i<Adof2;i++) {
-		double Mx = 0.;
-		for (int j=0;j<Adof2;j++) {
-			Mx += M_d(i,j)*acc[j];
-		}
-		double residual = Mx-f_sum[i];
-		printf("Residual: %g\n",residual);
+	if (Msolver.info()!=Eigen::Success) {
+		printf("Matrix solving failed\n");
+		exit(1);
 	}
-	printf("\n");*/
-
-    // Assemble the velocities in the first part of the out array. 
+	std::memcpy(acc,av.data(),Adof2*sizeof(double));
+	
+	// Assemble the velocities in the first part of the out array. 
 	for(i=0;i<n;i++)
 		for(int k=0;k<6;k++) {
 			out[6*i+k]=in[Adof2+6*i+k];
 		}
 	for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
+
+	edp=edm;
+	if(fix_boundary) {
+        for(i=0;i<n;i++) {
+            if(ncn[i]&bflag) { // Boundary vertices
+                for(int k=0;k<6;k++) { 
+					//out[6*i+k]=0; // Pin all velocity DOFs (TODO - this may be unnecessary)
+					out[Adof2+6*i+k]=0; // Pin acceleration DOFs
+				}
+            }
+			while(edp<ed[i+1]) {
+				if(ncn[i]&bflag && ncn[*edp]&bflag) {
+					int l=edge_lookup(i,*edp);
+					//out[6*n+l]=0;
+					out[Adof2+6*n+l]=0;
+				}
+				edp++;
+			}
+		}
+    }
 }
 
 /** Computes the biharmonic term from sheet mechanics.
@@ -1041,40 +1018,7 @@ void mesh::Kq_multiply(double *in) {
 	Kq.setZero();
 
 	// Do a matrix-vector product with K
-	//printf("Before multiply:\n"); // Debug
-	//print_pts(in);
 	Kq = Kd*in_e;
-	/*double *tmp = new double[Adof2]; // Debug
-	std::memcpy(tmp,Kq.data(),Adof2*sizeof(double));
-	printf("Kq:\n");
-	print_pts(tmp);
-	delete[] tmp;*/
-}
-
-/** Test a multiplication by a local stiffness matrix on one triangle. 
-*	\param[in] tri the triangle to test 
-	\param[in] Ti the generating node of the triangle. */
-void mesh::local_Kq_multiply(int tri, int Ti) {
-	Eigen::MatrixXd K_dense(Kd);
-
-	int *top = tom + 5*tri;
-	int v[3] = {Ti, top[0],top[1]};
-	int ed[3] = {top[2],top[4],top[3]};
-	int argv[21];
-	get_argv(argv,v,ed);
-
-	double loc_Kq[21];
-	printf("local multiply:\n");
-	for (int I=0;I<21;I++) {
-		loc_Kq[I]=0.;
-		for (int J=0;J<21;J++) {
-			if (argv[I]==11) {
-				//printf("K val: %g, pts val: %g, test: %g\n",K_dense(argv[I],argv[J]),pts[argv[J]],K_dense(argv[I],argv[J])*pts[argv[J]]);
-			}
-			loc_Kq[I] += K_dense(argv[I],argv[J])*pts[argv[J]];
-		}
-		printf("index: %d, val: %g\n",argv[I],loc_Kq[I]);
-	}
 }
 
 /** Computes the energy.

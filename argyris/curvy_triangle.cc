@@ -1,5 +1,6 @@
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 
 #include "mesh.hh"
 
@@ -149,6 +150,7 @@ void mesh::check_normals() {
 	
 	// Debug
 	std::ofstream Cfile("C0.csv");
+	Cfile << std::setprecision(17);
 
 	int *top=tom,tri=0;
 	double vb[6],l[3],na[6];
@@ -270,10 +272,9 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	int nx=static_cast<int>(sqrt(n)); // TODO - nx and ny may be different.
 	const int nn = nx + (np-1)*(nx-1);
 	char buf[50],buf1[50];
-
+	
 	const float s=1; // TODO - allow user to choose set side length
-	printf("Note: this script assumes the side lengths are equal to 1.\n"
-			"This should be fixed.\n");
+	printf("Note: this script assumes the side lengths are equal to 1. This should be fixed. Current s=%f.\n",s);
 
 	// Call sheet_gen in order to set up connection info for refined mesh
 	sprintf(buf,"./sheet_gen rec48 %f %d %d",s,nn,nn);
@@ -293,7 +294,7 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	// Keep track of deluxe points that have been "seen" to avoid re-calculating a solution val
 	bool *seen=new bool[n_del];
 	for(int i=0;i<n_del;i++) seen[i]=0;
-
+	
 	// Go through each original triangle to calculate the solution at deluxe points
 	int *top=tom,tri=0;
 	bool og;
@@ -366,9 +367,10 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 		edp++;
 	}
 	// Clear the markers
-    for(edp=mp_deluxe->edm;edp<edm+mp_deluxe->nc;) *(edp++)&=~bflag;
-
-	delete[] dvals; delete[] seen; delete mp_deluxe;
+    for(edp=mp_deluxe->edm;edp<mp_deluxe->edm+mp_deluxe->nc;) *(edp++)&=~bflag;
+	
+	delete[] dvals; delete[] seen;
+	delete mp_deluxe;
 }
 
 /** Calculates the global index of a point on a deluxe mesh. 
@@ -391,8 +393,11 @@ void mesh::draw_48mesh_gnuplot_curvy(FILE *fp) {
 	setup_springs();
 	// Build the change-of-basis FEM matrix, used to calculate the solution at new points
 	setup_fem();
+
+	double **edp_vals=new double*[(np-1)*ns]; // Pointers to new (x,y,z) points
+	double *ed_vals=new double[3*(np-1)*ns]; // Memory for new points
 	// Calculate the solution at each new edge point
-	interpolate();
+	interpolate(edp_vals,ed_vals);
 
 	int i,j,*edp=edm,*edp2,l,idx,p;
 	double *pt;
@@ -451,13 +456,12 @@ void mesh::draw_48mesh_gnuplot_curvy(FILE *fp) {
 
     // Clear the markers
     for(edp=edm;edp<edm+nc;) *(edp++)&=~bflag;
+
+	delete[] edp_vals; delete[] ed_vals;
 }
 /** Solves for the solution values at the new edge points. */
-void mesh::interpolate() {
+void mesh::interpolate(double **edp_vals,double *ed_vals) {
 	int *new_pts=new int[3*(np-1)]; // Contiguous storage of new points on one triangle
-	
-	edp_vals=new double*[(np-1)*ns]; // Pointers to new (x,y,z) points
-	ed_vals=new double[3*(np-1)*ns]; // Memory for new points
 
 	int *top=tom,tri=0;
 	for (int Ti=0;Ti<n;Ti++)
@@ -477,7 +481,7 @@ void mesh::interpolate() {
 				if(v[2]>v[0]) new_pts[3*(np-1)-1-k]=(np-1)*l3+k; // Third edge
 				else new_pts[2*(np-1)+k]=(np-1)*l3+k;
 			}
-			triangle_interpolate(new_pts,tri,v,ed);
+			triangle_interpolate(new_pts,tri,v,ed,edp_vals,ed_vals);
 			
 			top+=5; tri++;
 		}
@@ -492,7 +496,7 @@ void mesh::interpolate() {
 *	\param[in] v the vertices' indices.
 *	\param[in] ed the edges' indices.
 */
-void mesh::triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3]) {
+void mesh::triangle_interpolate(int* new_pts,int tri,int v[3],int ed[3],double **edp_vals,double *ed_vals) {
 	// Traverse the edges of the triangle
 	int i,j;
 	// Bottom edge
