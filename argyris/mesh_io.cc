@@ -134,11 +134,11 @@ int mesh::edge_mark(int i,int *edp) {
  * \param[in] normals whether to include the normal vectors or not. */
 void mesh::draw_mesh_pov(FILE *fp,bool normals) {
     int i,j,k,*edp=*ed,su=0;
-    double *pp,x,y,z;
+    double *xy,*pp,x,y,z;
 
     // Output the vertex vectors
     fprintf(fp,"mesh2{\n\tvertex_vectors{\n\t\t%d",n);
-    for(pp=pts;pp<pts+3*n;pp+=3) fprintf(fp,",\n\t\t<%g,%g,%g>",*pp,pp[1],pp[2]);
+    for(xy=xyz,pp=pts;pp<pts+6*n;xy+=3,pp+=6) fprintf(fp,",\n\t\t<%g,%g,%g>",*xy,xy[1],*pp);
 
     // Output the normal vectors
     if(normals) {
@@ -169,10 +169,10 @@ void mesh::draw_mesh_pov(FILE *fp,bool normals) {
  * \param[in] fp a file handle to write to. */
 void mesh::draw_cylinders_pov(FILE *fp) {
     int i,*edp=edm;
-    double *p=pts;
-    for(i=0;i<n;i++,p+=3) {
-        fprintf(fp,"\tsphere{<%g,%g,%g>,s}\n",*p,p[1],p[2]);
-        for(;edp<ed[i+1];edp++) if(i<*edp) cyl_print(fp,p,pts+*edp*3);
+    double *p=pts, *xy=xyz;
+    for(i=0;i<n;i++,p+=6,xy+=3) {
+        fprintf(fp,"\tsphere{<%g,%g,%g>,s}\n",*xy,xy[1],*p);
+        for(;edp<ed[i+1];edp++) if(i<*edp) cyl_print(fp,p,pts+*edp*6);
     }
 }
 
@@ -217,8 +217,8 @@ void mesh::normal_vector(int i,double &x,double &y,double &z) {
  * \param[in,out] (x,y,z) the vector on which to add the normal vector contribution.
  * \param[in] (i,j,k) the triplets of mesh points that make up a triangle. */
 inline void mesh::n_vec_contrib(double &x,double &y,double &z,int i,int j,int k) {
-    double ux=pts[3*j]-pts[3*i],uy=pts[3*j+1]-pts[3*i+1],uz=pts[3*j+2]-pts[3*i+2];
-    double vx=pts[3*k]-pts[3*i],vy=pts[3*k+1]-pts[3*i+1],vz=pts[3*k+2]-pts[3*i+2];
+    double ux=xyz[3*j]-xyz[3*i],uy=xyz[3*j+1]-xyz[3*i+1],uz=pts[6*j]-pts[6*i];
+    double vx=xyz[3*k]-xyz[3*i],vy=xyz[3*k+1]-xyz[3*i+1],vz=pts[6*k]-pts[6*i];
     x+=uy*vz-uz*vy;
     y+=uz*vx-ux*vz;
     z+=ux*vy-uy*vx;
@@ -247,23 +247,65 @@ void mesh::setup_output_dir(const char *odir_) {
  * \param[in] fp a file handle to write to. */
 void mesh::output_topology(FILE *fp) {
 
-    // Save the total vertices and edges
-    fwrite(&n,sizeof(int),2,fp);
+	if(output_refined) {
+		int nx=static_cast<int>(sqrt(n)); // TODO - nx and ny may be different.
+		const int nn = nx + (np-1)*(nx-1);
+		char buf[50], buf1[50];
+		float s=sed/np;
+		printf("The refined side length is set to %f.\n",s);
+		sprintf(buf,"./sheet_gen rec48 %f %d %d",s,nn,nn);
+		mesh_param par(K,drag,false,false,false);
+		std::system(buf);
+		sprintf(buf1,"sh48_%dx%d.bin",nn,nn);
+		mesh *mp_deluxe=new mesh(par,buf1);
 
-    // Save the vertex connection numbers
-    fwrite(ncn,sizeof(int),n,fp);
+		fwrite(&(mp_deluxe->n),sizeof(int),2,fp);
+		fwrite(mp_deluxe->ncn,sizeof(int),mp_deluxe->n,fp);
+		fwrite(mp_deluxe->edm,sizeof(int),mp_deluxe->nc,fp);
 
-    // Save the edge table
-    fwrite(edm,sizeof(int),nc,fp);
+		printf("Successfully saved the topology info for a refined REC48 mesh.\n");
+	}
+	else {
+		// Save the total vertices and edges
+		fwrite(&n,sizeof(int),2,fp);
+
+		// Save the vertex connection numbers
+		fwrite(ncn,sizeof(int),n,fp);
+
+		// Save the edge table
+		fwrite(edm,sizeof(int),nc,fp);
+	}
+}
+
+/** Currently this works for a rec48 mesh. */
+void mesh::mesh_print_dense_del(int fr,double t_,double *in) {
+    printf("# Output frame %d (t=%g)\n",fr,t_);
+
+    sprintf(obuf,"%s/pts.%d",odir,fr);
+    FILE *fp=safe_fopen(obuf,"wb");
+
+	const int n_del=(np-2)*(np-1)*ntri/2 + (np-1)*ns + n;
+	double *dvals=new double[3*n_del];
+	int nx=static_cast<int>(sqrt(n)); // TODO - nx and ny may be different.
+	const int nn = nx + (np-1)*(nx-1);
+	if(nn*nn!=n_del) {
+		printf("Error: total computed deluxe points is incorrect for the rec48 mesh.\n");
+		exit(1);
+	}
+	
+	// Compute solution at deluxe points
+	get_dvals(dvals,nn,n_del,nx);
+ 
+	fwrite(dvals,sizeof(double),3*n_del,fp);
+	delete[] dvals;
+    fclose(fp);
 }
 
 void mesh::mesh_print_dense(int fr,double t_,double *in) {
     printf("# Output frame %d (t=%g)\n",fr,t_);
     sprintf(obuf,"%s/pts.%d",odir,fr);
     FILE *fp=safe_fopen(obuf,"wb");
-
-	// TODO: delete later: print xyz coordinates only
-	// START TEST
+	
 	double *Apts = new double[3*n]; 
 	for (int i=0,j=0;j<6*n;i+=3,j+=6) {
 		Apts[i] = xyz[i];
@@ -272,8 +314,6 @@ void mesh::mesh_print_dense(int fr,double t_,double *in) {
 	}
 	fwrite(Apts,sizeof(double),3*n,fp);
 	delete[] Apts;
-	// END TEST
-    //fwrite(in,sizeof(double),Adof2,fp);
     fclose(fp);
 }
 

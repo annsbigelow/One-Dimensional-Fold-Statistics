@@ -261,36 +261,10 @@ void mesh::khat2k(double B[4],double x1,double y1,double xhat,double yhat,double
 	y = xhat*B[2] + yhat*B[3] + y1;
 }
 
-/** A deluxe version of draw_mesh_gnuplot(), allowing for 
-*	curvy triangle visualization by finding the solution at extra points on the triangles.
-	Works for a square, 4-8 mesh. */
-void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
-	// Set up tables to be able to access eo[], used in edge_lookup()
-	setup_springs();
+void mesh::get_dvals(double *dvals,int nn,int n_del,int nx) {
 	// Build the change-of-basis FEM matrix, used to calculate the solution at new points
 	setup_fem();
-	int nx=static_cast<int>(sqrt(n)); // TODO - nx and ny may be different.
-	const int nn = nx + (np-1)*(nx-1);
-	char buf[50],buf1[50];
 	
-	const float s=1; // TODO - allow user to choose set side length
-	printf("Note: this script assumes the side lengths are equal to 1. This should be fixed. Current s=%f.\n",s);
-
-	// Call sheet_gen in order to set up connection info for refined mesh
-	sprintf(buf,"./sheet_gen rec48 %f %d %d",s,nn,nn);
-	mesh_param par(K,drag,false,false,false);
-	std::system(buf);
-	sprintf(buf1,"sh48_%dx%d.bin",nn,nn);
-	mesh *mp_deluxe=new mesh(par,buf1);
-
-	// Create an array to store (x,y,z) vals at each refined grid point
-	const int n_del=(np-2)*(np-1)*ntri/2 + (np-1)*ns + n;
-	if(n_del!=mp_deluxe->n) {
-		printf("Error: total refined points don't match.\n"); 
-		printf("Calculated n: %d, actual n: %d\n",n_del,mp_deluxe->n);
-		exit(1);
-	}
-	double *dvals=new double[3*n_del];
 	// Keep track of deluxe points that have been "seen" to avoid re-calculating a solution val
 	bool *seen=new bool[n_del];
 	for(int i=0;i<n_del;i++) seen[i]=0;
@@ -311,10 +285,14 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 			T[2*k]=v[k]%nx;
 			T[2*k+1]=v[k]/nx;
 		}
-		
 		// Cycle through integer coordinates of deluxe points overlaid on the triangle
 		for(int j=0;j<=np;j++) for(int i=0;i<=np-j;i++) {
 				int g=get_fine_global_idx(T,i,j,nn,og);
+				if(g < 0 || g >= n_del) {
+					printf("ERROR: fine index out of bounds!\n");
+					printf("g=%d, n_del=%d\n", g, n_del);
+					exit(1);
+				}
 				// If this is an unseen new point, use FEM theory to calculate the solution there
 				if(!seen[g]&&!og) {
 					double x,y,z;
@@ -341,7 +319,45 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 		}
 		top+=5; tri++;
 	}
+	delete[] seen;
+}
 
+/** A deluxe version of draw_mesh_gnuplot(), allowing for 
+*	curvy triangle visualization by finding the solution at extra points on the triangles.
+	Works for a square, 4-8 mesh. */
+void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
+	// Set up tables to be able to access eo[], used in edge_lookup()
+	// Also compute ntri
+	setup_springs();
+
+	const int n_del=(np-2)*(np-1)*ntri/2 + (np-1)*ns + n;
+	double *dvals=new double[3*n_del];
+	int nx=static_cast<int>(sqrt(n)); // nx and ny may be different.
+	const int nn = nx + (np-1)*(nx-1);
+	if(nn*nn!=n_del) {
+		printf("Error: total computed deluxe points is incorrect for the rec48 mesh.\n");
+		exit(1);
+	}
+
+	// Compute solution at deluxe points
+	get_dvals(dvals,nn,n_del,nx);
+
+	// Call sheet_gen in order to set up connection info for refined mesh
+	// TODO - make this a function
+	char buf[50], buf1[50];
+	sprintf(buf,"./sheet_gen rec48 %f %d %d",sed,nn,nn);
+	mesh_param par(K,drag,false,false,false,s);
+	std::system(buf);
+	sprintf(buf1,"sh48_%dx%d.bin",nn,nn);
+	mesh *mp_deluxe=new mesh(par,buf1);
+
+	// Create an array to store (x,y,z) vals at each refined grid point
+	if(n_del!=mp_deluxe->n) {
+		printf("Error: total refined points don't match.\n"); 
+		printf("Calculated n: %d, actual n: %d\n",n_del,mp_deluxe->n);
+		exit(1);
+	}
+	
 	// Access the refined mesh connection info
 	mp_deluxe->setup_springs();
 	int *edp=mp_deluxe->edm, *edp2,j;
@@ -369,7 +385,7 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	// Clear the markers
     for(edp=mp_deluxe->edm;edp<mp_deluxe->edm+mp_deluxe->nc;) *(edp++)&=~bflag;
 	
-	delete[] dvals; delete[] seen;
+	delete[] dvals;
 	delete mp_deluxe;
 }
 
@@ -548,6 +564,7 @@ void mesh::calculate_q(int v[3],int ed[3],int tri,int i, int j,
 						double &physx,double &physy,double &soln) {
 	int argv[21];
 	get_argv(argv, v, ed);
+	
 	double  *v1=xyz+3*v[0], x1=*v1, y1=v1[1],
 			*v2=xyz+3*v[1], x2=*v2, y2=v2[1],
 			*v3=xyz+3*v[2], x3=*v3, y3=v3[1];
@@ -561,7 +578,7 @@ void mesh::calculate_q(int v[3],int ed[3],int tri,int i, int j,
 	// Transform the physical coordinates to reference
 	double refx,refy;
 	k2khat(B,detF,x1,y1,refx,refy,physx,physy);
-
+	
 	// Evaluate the reference Argyris basis functions at the calculated point
 	double phi_ref[21];
 	arg_z(refx,refy,phi_ref);

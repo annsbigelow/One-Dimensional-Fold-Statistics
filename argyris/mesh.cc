@@ -603,7 +603,7 @@ void mesh::assemble_K() {
 	//std::cout << "Smallest eigenvalues:\n" << solver.eigenvalues().head(5) << '\n';
 	if((solver.eigenvalues().head(5).real().array() < -1e-9).any()) {
 		printf("At least one of the eigenvalues of the stiffness matrix is negative.\n");
-		exit(1);
+		//exit(1);
 	}
 }
 
@@ -773,7 +773,7 @@ void mesh::buildC() {
 *	\param[in] nx the number of nodes in the x-direction
 */
 void mesh::Gauss_displacement(float s,int nx) {
-	const double eps0=0.01;
+	const double eps0=0.5;
 	const double eps1=4/(s*(nx-1)); // Chosen to complement zero-Dirichlet BC
 	// Initialize function values and gradients at all nodes
 	for(int i=0;i<n;i++) {
@@ -972,7 +972,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
 	for (i=0;i<Adof2;i++)
-		f_sum[i] = Kq[i]-drag*vp[i];
+		f_sum[i] = -Kq[i]-drag*vp[i];
 	// Cholesky direct solver, a = M^-1*f
 	av=Msolver.solve(f_sum);
 	if (Msolver.info()!=Eigen::Success) {

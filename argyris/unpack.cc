@@ -44,11 +44,11 @@ int main(int argc,char **argv) {
     // Read in the mesh
 	const bool r_all_dofs=atoi(argv[argc-1]);
 	const double K=.05,drag=.02;
-    mesh_param par(K,drag,false,r_all_dofs,false);
+	float sed=.5;
+    mesh_param par(K,drag,false,r_all_dofs,false,sed);
     mesh *mp;
 	np=atoi(argv[argc-2]);
     if(argc==7) {
-
         // If the are five command line arguments, then look for mesh
         // information and topology separately in an output directory. First,
         // check the frame number is sensible.
@@ -65,7 +65,6 @@ int main(int argc,char **argv) {
         if(r_all_dofs) sprintf(f_pts,"%s/pts_Argyris.%d",argv[2],fnum);
 		else sprintf(f_pts,"%s/pts.%d",argv[2],fnum);
         mp=new mesh(par,f_topo,f_pts);
-
         // Free the dynamically allocated memory
         delete [] f_topo;
     } else mp=new mesh(par,argv[2]);
