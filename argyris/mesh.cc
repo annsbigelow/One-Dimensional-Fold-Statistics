@@ -773,8 +773,8 @@ void mesh::buildC() {
 *	\param[in] nx the number of nodes in the x-direction
 */
 void mesh::Gauss_displacement(float s,int nx) {
-	const double eps0=0.5;
-	const double eps1=4/(s*(nx-1)); // Chosen to complement zero-Dirichlet BC
+	const double eps0=-2;
+	const double eps1=2/(s*(nx-1)); // Chosen to complement zero-Dirichlet BC
 	// Initialize function values and gradients at all nodes
 	for(int i=0;i<n;i++) {
 		double x=xyz[3*i], y=xyz[3*i+1];
@@ -954,15 +954,18 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 					in[6*i+k]=0; // Pin all position DOFs
 					in[Adof2+6*i+k]=0; // Pin velocity DOFs
 				}
+				/*in[6*i]=0; in[Adof2+6*i]=0; // u=0
+				in[6*i+2]=0; in[Adof2+6*i+2]=0; // u_y=0
+				in[6*i+5]=0; in[Adof2+6*i+5]=0; //u_yy=0*/
             }
-			while(edp<ed[i+1]) { // Boundary edges
+			/*while(edp<ed[i+1]) { // Boundary edges
 				if(ncn[i]&bflag && ncn[*edp]&bflag) {
 					int l=edge_lookup(i,*edp);
 					in[6*n+l]=0;
 					in[Adof2+6*n+l]=0;
 				}
 				edp++;
-			}
+			}*/
 		}
     }
 
@@ -993,18 +996,17 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
         for(i=0;i<n;i++) {
             if(ncn[i]&bflag) { // Boundary vertices
                 for(int k=0;k<6;k++) { 
-					//out[6*i+k]=0; // Pin all velocity DOFs (TODO - this may be unnecessary)
 					out[Adof2+6*i+k]=0; // Pin acceleration DOFs
 				}
+				//out[Adof2+6*i]=0; out[Adof2+6*i+2]=0; out[Adof2+6*i+5]=0;
             }
-			while(edp<ed[i+1]) {
+			/*while(edp<ed[i+1]) {
 				if(ncn[i]&bflag && ncn[*edp]&bflag) {
 					int l=edge_lookup(i,*edp);
-					//out[6*n+l]=0;
 					out[Adof2+6*n+l]=0;
 				}
 				edp++;
-			}
+			}*/
 		}
     }
 }

@@ -10,10 +10,10 @@ int main() {
 	bool adaptive=true, fix_boundary=true;
 	float s=.8; int nx=7;
 	char buf[50], buf1[50];
-	const bool r_all_dofs=false, wr_all_dofs;
+	bool r_all_dofs=false, wr_all_dofs;
 	if(adaptive) wr_all_dofs=false; else wr_all_dofs=true;
-	const double K=.05,drag=.02,kb=.00001;
-	printf("The side length of the coarse mesh is set to %f"
+	const double K=.05,drag=.02,kb=.001;
+	printf("The side length of the coarse mesh is set to %f "
 			"and the number of nodes in one direction is %d.\n",s,nx);
 
 	// Create mesh
@@ -33,7 +33,7 @@ int main() {
 		mp.np=6; mp.output_refined=true;
 	}
 	else mp.output_refined=false;
-	mp.setup_output_dir("dense_run.odr");
+	mp.setup_output_dir("dense_run_dirichlet.odr");
 	double start_time = omp_get_wtime();
 	mp.setup_springs(); mp.setup_fem(); mp.build_matrices();
 	printf("Mass matrix and stiffness matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
@@ -45,7 +45,7 @@ int main() {
 	// Solve!
 	if(adaptive) {
 		printf("Number of partitions for bendy triangle visualization is set to %d.\n",mp.np);
-		mp.solve_adaptive(100, 1e-4, 1e-4, false, 50);
+		mp.solve_adaptive(150, 1e-4, 1e-4, false, 150);
 	}
 	else {
 		double t=1; int steps=1000;

@@ -346,7 +346,7 @@ void mesh::draw_48mesh_gnuplot_deluxe(FILE *fp) {
 	// TODO - make this a function
 	char buf[50], buf1[50];
 	sprintf(buf,"./sheet_gen rec48 %f %d %d",sed,nn,nn);
-	mesh_param par(K,drag,false,false,false,s);
+	mesh_param par(K,drag,false,false,false,sed/np);
 	std::system(buf);
 	sprintf(buf1,"sh48_%dx%d.bin",nn,nn);
 	mesh *mp_deluxe=new mesh(par,buf1);

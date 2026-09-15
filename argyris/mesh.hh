@@ -307,7 +307,7 @@ class mesh_rk4 : public mesh, public rk4 {
         virtual void ff(double t_,double *in,double *out) {mesh_ff(t_,in,out);}
         virtual void init(double *q) {mesh_init();}
         virtual void print_dense(int fr,double t_,double *in) {
-			if(print_del) mesh_print_dense_del(fr,t_,in);
+			if(output_refined) mesh_print_dense_del(fr,t_,in);
 			else mesh_print_dense(fr,t_,in);
 		}
 		virtual void print_step() {mesh_print_last_step();}
