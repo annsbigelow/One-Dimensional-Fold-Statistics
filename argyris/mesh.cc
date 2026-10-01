@@ -1,4 +1,5 @@
 ﻿#include <cstring>
+#include <iostream>
 
 #include "mesh.hh"
 #include "../crumple/vec3.hh"
@@ -6,6 +7,7 @@
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseCholesky>
 #include <Eigen/Dense>
+#include <Eigen/Eigenvalues>
 #include <gsl/gsl_randist.h>
 
 // TODO - update output routines to print the smooth Argyris triangles
@@ -479,6 +481,8 @@ void mesh::setup_fem_matrices() {
 	// Build the mass matrix and global stiffness matrix
 	assemble_M();
 	assemble_K();
+	// Enforce essential/Dirichlet boundary conditions
+	set_zero_DOF();
 }
 
 /** Assembles the mass matrix using pre-computed integral values. */
@@ -534,6 +538,57 @@ void mesh::assemble_M() {
 	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
+	}
+}
+
+void mesh::set_zero_DOF() {
+	int *edp=eom;
+	for(int i=0;i<n;i++) {
+        while(edp<eo[i+1]) { // Boundary edges
+			if(ncn[i]&bflag && ncn[*edp]&bflag) {
+				double  *v1=xyz+3*i, x1=*v1, y1=v1[1],
+						*v2=xyz+3*(*edp), x2=*v2, y2=v2[1];
+				// Define the edge vector
+				double dx=x2-x1, dy=y2-y1;
+				int l=edge_lookup(i,*edp);
+				// Determine whether we're parallel to x- or y-axis
+				if(dx==0) {
+					for(int k=0;k<6;k++) if(k!=3) { // Don't include xx-derivative!
+						int ii=6*i+k, ij=6*(*edp)+k;
+						for (int j=0;j<M_sp.cols();++j) {
+							// Zero out the row for both edge endpoints
+							M_sp.coeffRef(ii,j)=0.; Kd.coeffRef(ii,j)=0.;
+							M_sp.coeffRef(ij,j)=0.; Kd.coeffRef(ij,j)=0.;
+							// Zero out the column
+							M_sp.coeffRef(j,ii)=0.; Kd.coeffRef(j,ii)=0.;
+							M_sp.coeffRef(j,ij)=0.; Kd.coeffRef(j,ij)=0.;
+						}
+						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
+					}
+				}
+				else if(dy==0) {
+					for(int k=0;k<5;k++) { // Don't include yy-derivative!
+						int ii=6*i+k, ij=6*(*edp)+k;
+						for (int j=0;j<M_sp.cols();++j) {
+							// Zero out the row for both edge endpoints
+							M_sp.coeffRef(ii,j)=0.; Kd.coeffRef(ii,j)=0.;
+							M_sp.coeffRef(ij,j)=0.; Kd.coeffRef(ij,j)=0.;
+							// Zero out the column
+							M_sp.coeffRef(j,ii)=0.; Kd.coeffRef(j,ii)=0.;
+							M_sp.coeffRef(j,ij)=0.; Kd.coeffRef(j,ij)=0.;
+						}
+						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
+					}
+				}
+				int edi=6*n+l;
+				for (int j=0;j<M_sp.cols();++j) {
+					M_sp.coeffRef(edi,j)=0.; M_sp.coeffRef(j,edi)=0.;
+					Kd.coeffRef(edi,j)=0.; Kd.coeffRef(j,edi)=0.;
+				}
+				M_sp.coeffRef(edi,edi)=1.;
+			}
+			edp++;
+		}
 	}
 }
 
@@ -941,36 +996,64 @@ void mesh::print_pts(double *pt_array) {
 	printf("\n\n");
 }
 
+void mesh::stability_diagnostic() {
+	printf("\n....Entering stability diagnostic....\n");
+	// Investigate spectral radius of the linear system.
+	// Look for lambda_max, Kx = lambda Mx
+	// => M^{-1}Kx = lambda x 
+	Eigen::MatrixXd K_dense(Kd);
+	Eigen::MatrixXd M_dense(M_sp);
+
+	// M needs to be positive definite for solver to work
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Mcheck(M_dense);
+	//std::cout << "Smallest eigenvalues of M:\n" << Mcheck.eigenvalues().head(5) << '\n';
+	if ((Mcheck.eigenvalues().head(5).real().array() < 1e-5).any()) {
+		printf("At least one of the eigenvalues of the mass matrix is close to 0.\n");
+		//exit(1);
+	}
+
+	Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_dense, M_dense);
+	if (solver.info() != Eigen::Success) {
+		printf("Stability diagnostic failed\n");
+		exit(1);
+	}
+
+	Eigen::VectorXd eigenvalues=solver.eigenvalues();
+	std::cout << "Largest eigenvalue of M^{-1}K = "
+			<< eigenvalues.maxCoeff() << "\n";
+	printf("....End stability diagnostic....\n\n");
+}
+
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
 
-	// Pin positions + velocities
-	int *edp=edm;
-	if(fix_boundary) {
-        for(i=0;i<n;i++) {
-            if(ncn[i]&bflag) { // Boundary vertices
-				for(int k=0;k<6;k++) { 
-					in[6*i+k]=0; // Pin all position DOFs
-					in[Adof2+6*i+k]=0; // Pin velocity DOFs
-				}
-				/*in[6*i]=0; in[Adof2+6*i]=0; // u=0
-				in[6*i+2]=0; in[Adof2+6*i+2]=0; // u_y=0
-				in[6*i+5]=0; in[Adof2+6*i+5]=0; //u_yy=0*/
-            }
-			/*while(edp<ed[i+1]) { // Boundary edges
-				if(ncn[i]&bflag && ncn[*edp]&bflag) {
-					int l=edge_lookup(i,*edp);
-					in[6*n+l]=0;
-					in[Adof2+6*n+l]=0;
-				}
-				edp++;
-			}*/
-		}
-    }
-
 	// Add biharmonic term from FEM computations
 	Kq_multiply(in);
+
+	// Manually set velocity to zero
+	int *edp=eom;
+	for(i=0;i<n;i++) while(edp<eo[i+1]) {
+		if(ncn[i]&bflag && ncn[*edp]&bflag) {
+			double  *v1=xyz+3*i, x1=*v1, y1=v1[1],
+					*v2=xyz+3*(*edp), x2=*v2, y2=v2[1];
+			// Define the edge vector
+			double dx=x2-x1, dy=y2-y1;
+			int l=edge_lookup(i,*edp);
+			if(dx==0) { // Vertical edge
+				for(int k=0;k<6;k++) if(k!=3) {
+					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
+				}
+			}
+			else if(dy==0) {
+				for(int k=0;k<5;k++) {
+					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
+				}
+			}
+			in[Adof2+6*n+l]=0.;
+		}
+		edp++;
+	}
 
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
@@ -990,25 +1073,6 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 			out[6*i+k]=in[Adof2+6*i+k];
 		}
 	for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
-
-	edp=edm;
-	if(fix_boundary) {
-        for(i=0;i<n;i++) {
-            if(ncn[i]&bflag) { // Boundary vertices
-                for(int k=0;k<6;k++) { 
-					out[Adof2+6*i+k]=0; // Pin acceleration DOFs
-				}
-				//out[Adof2+6*i]=0; out[Adof2+6*i+2]=0; out[Adof2+6*i+5]=0;
-            }
-			/*while(edp<ed[i+1]) {
-				if(ncn[i]&bflag && ncn[*edp]&bflag) {
-					int l=edge_lookup(i,*edp);
-					out[Adof2+6*n+l]=0;
-				}
-				edp++;
-			}*/
-		}
-    }
 }
 
 /** Computes the biharmonic term from sheet mechanics.

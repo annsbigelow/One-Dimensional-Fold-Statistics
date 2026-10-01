@@ -150,6 +150,8 @@ class mesh : public mesh_param {
 					double &xhat,double &yhat,double x,double y);
 		void nhat2n(double B[4],double detF,double nhatx,double nhaty,double &nx,double &ny);
 		void invert_C(int tri,double C_inv[441],double C[441]);
+		void set_zero_DOF();
+		void stability_diagnostic();
 		/** Initial displacement functions */
 		void Gauss_displacement(float s, int nx);
 		void linear_gradient();

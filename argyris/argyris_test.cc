@@ -36,6 +36,7 @@ int main() {
 	mp.setup_output_dir("dense_run_dirichlet.odr");
 	double start_time = omp_get_wtime();
 	mp.setup_springs(); mp.setup_fem(); mp.build_matrices();
+	mp.stability_diagnostic();
 	printf("Mass matrix and stiffness matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
 
 	// Apply perturbation in z-direction
