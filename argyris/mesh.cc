@@ -1,5 +1,6 @@
 ﻿#include <cstring>
 #include <iostream>
+#include <fstream>
 
 #include "mesh.hh"
 #include "../crumple/vec3.hh"
@@ -483,6 +484,7 @@ void mesh::setup_fem_matrices() {
 	assemble_K();
 	// Enforce essential/Dirichlet boundary conditions
 	set_zero_DOF();
+	stability_diagnostic();
 }
 
 /** Assembles the mass matrix using pre-computed integral values. */
@@ -557,11 +559,11 @@ void mesh::set_zero_DOF() {
 						int ii=6*i+k, ij=6*(*edp)+k;
 						for (int j=0;j<M_sp.cols();++j) {
 							// Zero out the row for both edge endpoints
-							M_sp.coeffRef(ii,j)=0.; Kd.coeffRef(ii,j)=0.;
-							M_sp.coeffRef(ij,j)=0.; Kd.coeffRef(ij,j)=0.;
+							M_sp.coeffRef(ii,j)=0.;
+							M_sp.coeffRef(ij,j)=0.;
 							// Zero out the column
-							M_sp.coeffRef(j,ii)=0.; Kd.coeffRef(j,ii)=0.;
-							M_sp.coeffRef(j,ij)=0.; Kd.coeffRef(j,ij)=0.;
+							M_sp.coeffRef(j,ii)=0.;
+							M_sp.coeffRef(j,ij)=0.;
 						}
 						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
 					}
@@ -571,11 +573,11 @@ void mesh::set_zero_DOF() {
 						int ii=6*i+k, ij=6*(*edp)+k;
 						for (int j=0;j<M_sp.cols();++j) {
 							// Zero out the row for both edge endpoints
-							M_sp.coeffRef(ii,j)=0.; Kd.coeffRef(ii,j)=0.;
-							M_sp.coeffRef(ij,j)=0.; Kd.coeffRef(ij,j)=0.;
+							M_sp.coeffRef(ii,j)=0.;
+							M_sp.coeffRef(ij,j)=0.;
 							// Zero out the column
-							M_sp.coeffRef(j,ii)=0.; Kd.coeffRef(j,ii)=0.;
-							M_sp.coeffRef(j,ij)=0.; Kd.coeffRef(j,ij)=0.;
+							M_sp.coeffRef(j,ii)=0.;
+							M_sp.coeffRef(j,ij)=0.;
 						}
 						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
 					}
@@ -583,7 +585,6 @@ void mesh::set_zero_DOF() {
 				int edi=6*n+l;
 				for (int j=0;j<M_sp.cols();++j) {
 					M_sp.coeffRef(edi,j)=0.; M_sp.coeffRef(j,edi)=0.;
-					Kd.coeffRef(edi,j)=0.; Kd.coeffRef(j,edi)=0.;
 				}
 				M_sp.coeffRef(edi,edi)=1.;
 			}
@@ -1003,6 +1004,24 @@ void mesh::stability_diagnostic() {
 	// => M^{-1}Kx = lambda x 
 	Eigen::MatrixXd K_dense(Kd);
 	Eigen::MatrixXd M_dense(M_sp);
+	// Debug
+	std::ofstream outputFile("Mass matrix.csv");
+	for (int i = 0; i < M_dense.rows(); i++) {
+		for (int j = 0; j < M_dense.cols(); j++) {
+			outputFile << M_dense(i, j) << " ";
+		}
+		outputFile << std::endl;
+	}
+	outputFile.close();
+	// Debug
+	std::ofstream outputFile1("Stiffness matrix.csv");
+	for (int i = 0; i < K_dense.rows(); i++) {
+		for (int j = 0; j < K_dense.cols(); j++) {
+			outputFile1 << K_dense(i, j) << " ";
+		}
+		outputFile1 << std::endl;
+	}
+	outputFile1.close();
 
 	// M needs to be positive definite for solver to work
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Mcheck(M_dense);
@@ -1031,7 +1050,13 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	// Add biharmonic term from FEM computations
 	Kq_multiply(in);
 
-	// Manually set velocity to zero
+	Eigen::VectorXd f_sum(Adof2), av(Adof2);
+	double *vp=in+Adof2;
+	for (i=0;i<Adof2;i++)
+		f_sum[i] = -Kq[i]-drag*vp[i];
+
+	// Zero out boundary DOFs on the RHS
+	// Also manually set velocity to 0
 	int *edp=eom;
 	for(i=0;i<n;i++) while(edp<eo[i+1]) {
 		if(ncn[i]&bflag && ncn[*edp]&bflag) {
@@ -1042,23 +1067,22 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 			int l=edge_lookup(i,*edp);
 			if(dx==0) { // Vertical edge
 				for(int k=0;k<6;k++) if(k!=3) {
+					f_sum[6*i+k]=0.; f_sum[6*(*edp)+k]=0.;
 					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
 				}
 			}
 			else if(dy==0) {
 				for(int k=0;k<5;k++) {
+					f_sum[6*i+k]=0.; f_sum[6*(*edp)+k]=0.;
 					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
 				}
 			}
+			f_sum[6*n+l]=0.;
 			in[Adof2+6*n+l]=0.;
 		}
 		edp++;
 	}
 
-	Eigen::VectorXd f_sum(Adof2), av(Adof2);
-	double *vp=in+Adof2;
-	for (i=0;i<Adof2;i++)
-		f_sum[i] = -Kq[i]-drag*vp[i];
 	// Cholesky direct solver, a = M^-1*f
 	av=Msolver.solve(f_sum);
 	if (Msolver.info()!=Eigen::Success) {

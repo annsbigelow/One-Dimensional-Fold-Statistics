@@ -8,7 +8,7 @@
 int main() {
 	// Set parameters
 	bool adaptive=true, fix_boundary=true;
-	float s=.8; int nx=7;
+	float s=.8; int nx=3;
 	char buf[50], buf1[50];
 	bool r_all_dofs=false, wr_all_dofs;
 	if(adaptive) wr_all_dofs=false; else wr_all_dofs=true;
@@ -36,7 +36,6 @@ int main() {
 	mp.setup_output_dir("dense_run_dirichlet.odr");
 	double start_time = omp_get_wtime();
 	mp.setup_springs(); mp.setup_fem(); mp.build_matrices();
-	mp.stability_diagnostic();
 	printf("Mass matrix and stiffness matrix setup time: %g seconds\n",omp_get_wtime()-start_time);
 
 	// Apply perturbation in z-direction
