@@ -10,6 +10,8 @@
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <gsl/gsl_randist.h>
+#include <sys/types.h> // For checking the kernel of K
+#include <sys/stat.h> // For checking the kernel of K
 
 // TODO - update output routines to print the smooth Argyris triangles
 
@@ -484,7 +486,7 @@ void mesh::setup_fem_matrices() {
 	assemble_K();
 	// Enforce essential/Dirichlet boundary conditions
 	set_zero_DOF();
-	stability_diagnostic();
+	//stability_diagnostic();
 }
 
 /** Assembles the mass matrix using pre-computed integral values. */
@@ -533,17 +535,17 @@ void mesh::assemble_M() {
 	// Convert triplets list to SparseMatrix.
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
-
-	// Factorize sparse matrix using LLT Cholesky factorization
+	printf("Assembled M.\n");
+	/*// Factorize sparse matrix using LLT Cholesky factorization
 	Msolver.analyzePattern(M_sp);
 	Msolver.factorize(M_sp);
 	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
-	}
+	}*/
 }
 
-void mesh::set_zero_DOF() {
+void mesh::set_zero_DOF() { // TODO: This is slow for large n!
 	int *edp=eom;
 	for(int i=0;i<n;i++) {
         while(edp<eo[i+1]) { // Boundary edges
@@ -591,6 +593,7 @@ void mesh::set_zero_DOF() {
 			edp++;
 		}
 	}
+	printf("Set boundary conditions in M.\n");
 }
 
 /** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
@@ -645,22 +648,7 @@ void mesh::assemble_K() {
 		}
 	// Convert triplets list to SparseMatrix.
 	Kd.setFromTriplets(triplets.begin(), triplets.end());
-
-	Eigen::MatrixXd K_dense(Kd);
-	for (int i=0;i<K_dense.rows();i++) {
-		for (int j=0;j<K_dense.cols();j++) {
-			double diff = abs(K_dense(i,j) - K_dense(j,i));
-			if (diff > 1e-13)
-				printf("Stiffness symmetry break. diff=%g\n", diff);
-		}
-	}
-
-	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_dense);
-	//std::cout << "Smallest eigenvalues:\n" << solver.eigenvalues().head(5) << '\n';
-	if((solver.eigenvalues().head(5).real().array() < -1e-9).any()) {
-		printf("At least one of the eigenvalues of the stiffness matrix is negative.\n");
-		//exit(1);
-	}
+	printf("Assembled K.\n");
 }
 
 /** Define the global normal orientations */
@@ -997,6 +985,97 @@ void mesh::print_pts(double *pt_array) {
 	printf("\n\n");
 }
 
+void mesh::checkK(std::ofstream& File) {
+	Eigen::MatrixXd K_dense(Kd);
+	for (int i=0;i<K_dense.rows();i++) {
+		for (int j=0;j<K_dense.cols();j++) {
+			double diff = abs(K_dense(i,j) - K_dense(j,i));
+			if (diff > 1e-13)
+				printf("Stiffness symmetry break. diff=%g\n", diff);
+		}
+	}
+
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Kcheck(K_dense);
+	Eigen::VectorXd solver_evals = Kcheck.eigenvalues();
+
+	printf("Eigenvalues 8-14:\n");
+	for(int i=8;i<15;i++)
+		printf("%g\n",solver_evals[i]);
+
+	//std::cout << "Smallest 15 eigenvalues:" << " " << solver_evals.head(15) << "\n";
+}
+
+/** Investigate the eigenvectors of K corresponding to small eigenvalues. */
+void mesh::check_kernel_K() {
+	//// Setup an output directory in which to store the eigenvectors. ////
+
+    // Allocate space for the directory filename and copy it. Allocate additional
+    // space for assembling the output filenames.
+	const char *odir_= "kernel.odr";
+	size_t l=strlen(odir_)+1;
+    char *eval_odir=new char[2*l+32];
+	memcpy(eval_odir,odir_,sizeof(char)*l);
+    char *eval_obuf=eval_odir+l;
+
+    // Make the output directory if it doesn't already exist
+    mkdir(eval_odir,S_IRWXU|S_IRWXG|S_IROTH|S_IXOTH);
+
+    // Save the mesh topology
+    sprintf(eval_obuf,"%s/topo",eval_odir);
+    output_topology(eval_obuf);
+
+	// Identify the eigenvalues smaller than a tolerance value
+	Eigen::MatrixXd K_dense(Kd);
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Kcheck(K_dense);
+	const double tol = 1e-16;
+	Eigen::VectorXd evals = Kcheck.eigenvalues();
+
+	if(Kcheck.eigenvalues().size()!=Adof2) printf("ERROR: There aren't enough eigenvalues of K.\n");
+	double out[8*n+ns];
+	int k=0; 
+	for (int i=0;i<Adof2; ++i) {
+		if (Kcheck.eigenvalues()[i] <= tol) {
+			sprintf(eval_obuf,"%s/evec.%d",eval_odir,k);
+			FILE *fp=safe_fopen(eval_obuf,"wb");
+			Eigen::VectorXd evec=Kcheck.eigenvectors().col(i);
+			double *evec_data = evec.data();
+			for(int j=0;j<n;j++) {
+				out[8*j]=xyz[3*j]; out[8*j+1]=xyz[3*j+1];
+				for(int l=0;l<6;l++) out[8*j+2+l]=evec_data[6*j+l];
+			}
+			for(int k=0;k<ns;k++) out[8*n+k]=evec_data[6*n+k];
+
+			fwrite(out,sizeof(double),8*n+ns,fp);
+			fclose(fp);
+
+			printf("Successfull output of the %dth eigenvector for the eigenvalue %g.\n",i+1,evals[i]);
+			k+=1;
+		}
+	}
+	delete [] eval_odir;
+}
+
+void mesh::checkM_SPD() {
+	Eigen::MatrixXd M_dense(M_sp);
+
+	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Mcheck(M_dense);
+	std::cout << "Smallest eigenvalues of M:\n" << Mcheck.eigenvalues().head(5) << '\n';
+/*	if ((Mcheck.eigenvalues().head(5).real().array() < 1e-5).any()) {
+		printf("At least one of the eigenvalues of the mass matrix is close to 0.\n");
+	}
+
+	// Investigate the eigenvectors of M corresponding to small eigenvalues
+	const double tol = 1e-4;
+    std::vector<Eigen::VectorXd> evecs;
+
+    for (int i=0;i<Mcheck.eigenvalues().size(); ++i) {
+        if (std::abs(Mcheck.eigenvalues()[i]) < tol) {
+            evecs.push_back(Mcheck.eigenvectors().col(i));
+            std::cout << "Small M eigenvalue: " << Mcheck.eigenvalues()[i] << "\n";
+        }
+    }*/
+}
+
 void mesh::stability_diagnostic() {
 	printf("\n....Entering stability diagnostic....\n");
 	// Investigate spectral radius of the linear system.
@@ -1023,14 +1102,6 @@ void mesh::stability_diagnostic() {
 	}
 	outputFile1.close();
 
-	// M needs to be positive definite for solver to work
-	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Mcheck(M_dense);
-	//std::cout << "Smallest eigenvalues of M:\n" << Mcheck.eigenvalues().head(5) << '\n';
-	if ((Mcheck.eigenvalues().head(5).real().array() < 1e-5).any()) {
-		printf("At least one of the eigenvalues of the mass matrix is close to 0.\n");
-		//exit(1);
-	}
-
 	Eigen::GeneralizedSelfAdjointEigenSolver<Eigen::MatrixXd> solver(K_dense, M_dense);
 	if (solver.info() != Eigen::Success) {
 		printf("Stability diagnostic failed\n");
@@ -1040,6 +1111,7 @@ void mesh::stability_diagnostic() {
 	Eigen::VectorXd eigenvalues=solver.eigenvalues();
 	std::cout << "Largest eigenvalue of M^{-1}K = "
 			<< eigenvalues.maxCoeff() << "\n";
+
 	printf("....End stability diagnostic....\n\n");
 }
 

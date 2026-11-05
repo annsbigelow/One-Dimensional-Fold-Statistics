@@ -8,7 +8,7 @@
 int main() {
 	// Set parameters
 	bool adaptive=true, fix_boundary=true;
-	float s=.8; int nx=3;
+	float s=.8; int nx=7;
 	char buf[50], buf1[50];
 	bool r_all_dofs=false, wr_all_dofs;
 	if(adaptive) wr_all_dofs=false; else wr_all_dofs=true;
@@ -43,7 +43,7 @@ int main() {
 	//mp.mesh_print_last_step(); // Switch on/off to observe initial displacement
 
 	// Solve!
-	if(adaptive) {
+	/*if(adaptive) {
 		printf("Number of partitions for bendy triangle visualization is set to %d.\n",mp.np);
 		mp.solve_adaptive(150, 1e-4, 1e-4, false, 150);
 	}
@@ -52,5 +52,5 @@ int main() {
 		printf("The fixed timestep is equal to %g.\n",t/steps);
 		mp.solve_fixed(t,steps,true); 
 	}
-	printf("Elapsed solution time: %g seconds\n",omp_get_wtime() - start_time);
+	printf("Elapsed solution time: %g seconds\n",omp_get_wtime() - start_time);*/
 }

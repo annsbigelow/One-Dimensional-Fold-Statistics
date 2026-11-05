@@ -152,6 +152,9 @@ class mesh : public mesh_param {
 		void invert_C(int tri,double C_inv[441],double C[441]);
 		void set_zero_DOF();
 		void stability_diagnostic();
+		void check_kernel_K();
+		void checkM_SPD();
+		void checkK(std::ofstream &File);
 		/** Initial displacement functions */
 		void Gauss_displacement(float s, int nx);
 		void linear_gradient();
