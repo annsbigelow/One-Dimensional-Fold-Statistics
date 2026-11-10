@@ -536,13 +536,13 @@ void mesh::assemble_M() {
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
 	printf("Assembled M.\n");
-	/*// Factorize sparse matrix using LLT Cholesky factorization
+	// Factorize sparse matrix using LLT Cholesky factorization
 	Msolver.analyzePattern(M_sp);
 	Msolver.factorize(M_sp);
 	if (Msolver.info()!=Eigen::Success) {
 		printf("Mass matrix factorization failed\n");
 		exit(1);
-	}*/
+	}
 }
 
 void mesh::set_zero_DOF() { // TODO: This is slow for large n!
