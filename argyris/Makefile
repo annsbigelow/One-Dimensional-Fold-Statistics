@@ -1,18 +1,18 @@
 # Include the configuration file
-include ../config/config.mk.linux
+include ../config/config.mk.mac
 
 lflags=`gsl-config --libs`
 iflags=`gsl-config --cflags`
 
 # Lists of files to be built
-local_objs = mesh.o mesh_io.o pre_comps.o
+local_objs = mesh.o mesh_io.o pre_comps.o curvy_triangle.o
 crumple_objs = rk4.o mesh_en.o common.o ext_potential.o p_grid.o deformation.o
 objs = $(local_objs) $(crumple_objs)
 
 src = $(patsubst %.o,%.cc,$(local_objs)) \
       $(patsubst %.o,../crumple/%.cc,$(crumple_objs))
 
-execs=sheet_gen sph_gen unpack mesh_conv convergence argyris_test
+execs=sheet_gen sph_gen unpack mesh_conv convergence argyris_test eval_spread_check
 
 all: $(execs)
 
@@ -37,8 +37,8 @@ $(local_objs): %.o: %.cc
 $(crumple_objs): %.o: ../crumple/%.cc
 	$(cxx) $(cflags) $(iflags) $(voropp_iflags) $(eigen_iflags) -c $< -o $@
 
-unpack: ../crumple/unpack.cc libcrump.a
-	$(cxx) $(cflags) $(iflags) -o $@ $^ $(lflags)
+unpack: unpack.cc libcrump.a
+	$(cxx) $(cflags) $(iflags) $(eigen_iflags) -o $@ $^ $(lflags)
 
 sph_gen: ../crumple/sph_gen.cc
 	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
@@ -47,12 +47,15 @@ sheet_gen: ../crumple/sheet_gen.cc
 	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
 
 mesh_conv: ../crumple/mesh_conv.cc libcrump.a
-	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
+	$(cxx) $(cflags) $(iflags) $(voropp_iflags) $(eigen_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
 
 convergence: ../crumple/convergence.cc libcrump.a
-	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
+	$(cxx) $(cflags) $(iflags) $(voropp_iflags) $(eigen_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
 
 argyris_test: argyris_test.cc libcrump.a
-	$(cxx) $(cflags) $(iflags) $(voropp_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
+	$(cxx) $(cflags) $(iflags) $(voropp_iflags) $(eigen_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
+
+eval_spread_check: eval_spread_check.cc libcrump.a
+	$(cxx) $(cflags) $(iflags) $(eigen_iflags) -o $@ $^ $(lflags)
 
 .PHONY: clean depend
