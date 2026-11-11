@@ -22,6 +22,7 @@ int main() {
 	std::system(buf);
 	sprintf(buf1,"sh48_%dx%d.bin",nx,nx);
 	mesh_rk4 mp(par,buf1);
+	mp.implicit=false;
 
 	// Centralize and scale the mesh
 	double wx, wy, wz;

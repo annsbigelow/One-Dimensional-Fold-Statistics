@@ -11,6 +11,7 @@
 #include "../crumple/ext_potential.hh"
 #include "../crumple/p_grid.hh"
 #include "pre_comps.hh"
+#include "trapezoid.hh"
 
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_vector.h>
@@ -85,20 +86,20 @@ class mesh : public mesh_param {
 		int Adof;
 		/** Half the Argyris degrees of freedom */
 		int Adof2;
-		/** FEM Sparse mass matrix */
-		Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
-		/** FEM Mass matrix Sparse Cholesky solver */
-		Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > Msolver;
 		/** Argyris stiffness matrix */
-		Eigen::SparseMatrix<double, Eigen::RowMajor> Kd;
-		/** FEM Biharmonic term */
-		Eigen::VectorXd Kq;
+		Eigen::SparseMatrix<double, Eigen::RowMajor> K_sp;
+        /** Argyris mass matrix */
+        Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
+        // Sparse Cholesky solver
+	    Eigen::SimplicialLLT<Eigen::SparseMatrix<double> > Asolver;
 		/** Argyris change of bases matrix */
 		double *C_glob;
 		/** Global normal vectors to edges */
 		double *normals;
 		/** Whether to use quadrature or exact integration for the FEM. */
 		bool quadrature;
+        /** Whether to use the implicit solve or explicit */
+        bool implicit;
 		/** Gauss-Legendre quadrature points */
 		double *xi;
 		/** Gauss-Legendre quadrature weights */
@@ -114,6 +115,8 @@ class mesh : public mesh_param {
 		void init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
 			double ksm,double ksv,int nx,int ny);
         void mesh_ff(double t_,double *in,double *out);
+        void mesh_FF(double dt,double t_,double *in,double *out);
+        void mesh_mat_assemble(double dt);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);
 		void mesh_print_last_step();
@@ -139,7 +142,7 @@ class mesh : public mesh_param {
 		void setup_fem();
 		void print_pts(double* pt_array);
 		void arr_zeros(double* A, int size);
-		void Kq_multiply(double* in);
+		void Kq_multiply(double* in,Eigen::VectorXd &Kq);
 		void get_argv(int* argv, int v[3], int ed[3]);
 		void tri_geo(int v[3], double* vb, double* l, double* na);
 		void check_dofs();
@@ -150,10 +153,9 @@ class mesh : public mesh_param {
 					double &xhat,double &yhat,double x,double y);
 		void nhat2n(double B[4],double detF,double nhatx,double nhaty,double &nx,double &ny);
 		void invert_C(int tri,double C_inv[441],double C[441]);
-		void set_zero_DOF();
+		void set_zero_DOF(Eigen::SparseMatrix<double, Eigen::RowMajor> &Mat);
 		void stability_diagnostic();
 		void check_kernel_K();
-		void checkM_SPD();
 		void checkK(std::ofstream &File);
 		/** Initial displacement functions */
 		void Gauss_displacement(float s, int nx);
@@ -266,7 +268,6 @@ class mesh : public mesh_param {
         }
         inline void dfun(double *in,double *out) {
             for(int i=0;i<Adof2;i++) out[i]=0.;
-            Kq_multiply(in);
             for(int i=0;i<Adof2;i++) out[i]=-out[i];
         }
     private:
@@ -316,6 +317,22 @@ class mesh_rk4 : public mesh, public rk4 {
 			else mesh_print_dense(fr,t_,in);
 		}
 		virtual void print_step() {mesh_print_last_step();}
+};
+
+/** Class to set up a mesh with a trapezoid integrator. */
+class mesh_trap : public mesh, public trapezoid {
+    public: 
+        mesh_trap(mesh_param &mp,const char* filename) : mesh(mp,filename), trapezoid() {
+            allocate(Adof,pts);
+
+        }
+        mesh_trap(mesh_param &mp,const char* f_topo,const char* f_pts) : mesh(mp,f_topo,f_pts), 
+                    trapezoid() {
+            allocate(Adof,pts);
+        }
+        virtual void FF(double dt,double t_,double *in,double *out) {mesh_FF(dt,t_,in,out);}
+        virtual void print_step() {mesh_print_last_step();}
+        virtual void mat_assemble(double dt) {mesh_mat_assemble(dt);}
 };
 
 #endif

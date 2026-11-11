@@ -5,14 +5,14 @@ lflags=`gsl-config --libs`
 iflags=`gsl-config --cflags`
 
 # Lists of files to be built
-local_objs = mesh.o mesh_io.o pre_comps.o curvy_triangle.o
+local_objs = mesh.o mesh_io.o pre_comps.o curvy_triangle.o trapezoid.o
 crumple_objs = rk4.o mesh_en.o common.o ext_potential.o p_grid.o deformation.o
 objs = $(local_objs) $(crumple_objs)
 
 src = $(patsubst %.o,%.cc,$(local_objs)) \
       $(patsubst %.o,../crumple/%.cc,$(crumple_objs))
 
-execs=sheet_gen sph_gen unpack mesh_conv convergence argyris_test eval_spread_check
+execs=sheet_gen sph_gen unpack mesh_conv convergence argyris_test eval_spread_check argyris_trap_test
 
 all: $(execs)
 
@@ -57,5 +57,8 @@ argyris_test: argyris_test.cc libcrump.a
 
 eval_spread_check: eval_spread_check.cc libcrump.a
 	$(cxx) $(cflags) $(iflags) $(eigen_iflags) -o $@ $^ $(lflags)
+
+argyris_trap_test: argyris_trap_test.cc libcrump.a
+	$(cxx) $(cflags) $(iflags) $(voropp_iflags) $(eigen_iflags) -o $@ $^ $(voropp_lflags) $(lflags)
 
 .PHONY: clean depend

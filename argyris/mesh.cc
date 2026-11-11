@@ -134,19 +134,20 @@ void mesh::setup_springs() {
 	C_glob = new double[ntri*441];
 }
 
-void mesh::build_matrices() {
-	quadrature=false;
-	if (quadrature)
-		setup_quad_matrices();
-	else
-		setup_fem_matrices();
-}
-
 void mesh::setup_fem() {
 	// Define the global normal directions
 	global_normals();
 	// Build change of bases matrices
 	buildC();
+}
+
+void mesh::build_matrices() {
+	Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
+	quadrature=false;
+	if (quadrature)
+		setup_quad_matrices();
+	else
+		setup_fem_matrices();
 }
 
 int mesh::edge_lookup(int i,int j) {
@@ -177,8 +178,29 @@ void mesh::setup_quad_matrices() {
 	assembleK_quad();
 }
 
+/** Build the FEM mass and stiffness matrices. */
+void mesh::setup_fem_matrices() {
+	// Build the mass matrix and global stiffness matrix
+	assemble_M();
+	assemble_K();
+
+	if(!implicit) {
+		Asolver.analyzePattern(M_sp);
+		Asolver.factorize(M_sp);
+		if (Asolver.info()!=Eigen::Success) {
+			printf("Mass matrix factorization failed\n");
+			exit(1);
+		}
+		printf("Mass matrix factorized successfully.\n");
+		// Enforce essential/Dirichlet boundary conditions
+		set_zero_DOF(M_sp);
+	}
+	//stability_diagnostic();
+}
+
 /** Assembles the mass matrix using 6-point Gauss-Legendre quadrature. */
 void mesh::assembleM_quad() {
+	M_sp.resize(Adof2,Adof2);
 	// Evaluate each basis function at each Gauss-Legendre point
 	double GL[21][6][6];
 	double phi[21];
@@ -193,7 +215,6 @@ void mesh::assembleM_quad() {
 		}
 	}
 
-	M_sp.resize(Adof2,Adof2);
 	typedef Eigen::Triplet<double> T; // Use a list of triplets for fast computation
 	std::vector<T> Mtriplets;
 	Mtriplets.reserve(6*Adof2); // Get (estimated) memory up front for performance
@@ -226,14 +247,6 @@ void mesh::assembleM_quad() {
 	// Convert triplets list to SparseMatrix.
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(Mtriplets.begin(),Mtriplets.end());
-
-	// Factorize sparse matrix using LLT Cholesky factorization
-	Msolver.analyzePattern(M_sp);
-	Msolver.factorize(M_sp);
-	if (Msolver.info()!=Eigen::Success) {
-		printf("Mass matrix factorization failed\n");
-		exit(1);
-	}
 }
 
 /** Performs an integration of two basis functions multiplied together
@@ -309,7 +322,7 @@ void mesh::assembleK_quad() {
 		}
 	}
 
-	Kd.resize(Adof2, Adof2);
+	K_sp.resize(Adof2, Adof2);
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> Ktriplets;
 	// Get (estimated) memory up front for performance
@@ -325,7 +338,7 @@ void mesh::assembleK_quad() {
 			double B[4]={ vb[0],vb[2],vb[1],vb[3] };
 			double detF=vb[0]*vb[3] - vb[2]*vb[1];
 			double fac = 1/(detF*detF);
-			double prefac = kappa*detF; // TODO: Use the same bending modulus as before?
+			double prefac = kappa*detF;
 
 			get_argv(argv, v, ed);
 
@@ -342,9 +355,9 @@ void mesh::assembleK_quad() {
 			top+=5; tri+=1;
 		}
 	// Convert triplets list to SparseMatrix.
-	Kd.setFromTriplets(Ktriplets.begin(), Ktriplets.end());
+	K_sp.setFromTriplets(Ktriplets.begin(), Ktriplets.end());
 
-	Eigen::MatrixXd K_dense(Kd);
+	Eigen::MatrixXd K_dense(K_sp);
 	for (int i = 0; i < K_dense.rows(); i++) {
 		for (int j = 0; j < K_dense.cols(); j++) {
 			double diff = abs(K_dense(i, j) - K_dense(j, i));
@@ -353,7 +366,7 @@ void mesh::assembleK_quad() {
 		}
 	}
 
-	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(Kd);
+	Eigen::SimplicialLLT<Eigen::SparseMatrix< double, Eigen::RowMajor> > llt(K_sp);
 	if (llt.info() == Eigen::NumericalIssue) {
 		printf("Error: Stiffness matrix is not symmetric positive definite.\n");
 		exit(1);
@@ -479,15 +492,6 @@ double mesh::laplace(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21]
 	return out;
 }
 
-/** Build the FEM change of bases, mass, and stiffness matrices. */
-void mesh::setup_fem_matrices() {
-	// Build the mass matrix and global stiffness matrix
-	assemble_M();
-	assemble_K();
-	// Enforce essential/Dirichlet boundary conditions
-	set_zero_DOF();
-	//stability_diagnostic();
-}
 
 /** Assembles the mass matrix using pre-computed integral values. */
 void mesh::assemble_M() {
@@ -536,16 +540,12 @@ void mesh::assemble_M() {
 	// Contributions in same row,col are summed automatically.
 	M_sp.setFromTriplets(triplets.begin(),triplets.end());
 	printf("Assembled M.\n");
-	// Factorize sparse matrix using LLT Cholesky factorization
-	Msolver.analyzePattern(M_sp);
-	Msolver.factorize(M_sp);
-	if (Msolver.info()!=Eigen::Success) {
-		printf("Mass matrix factorization failed\n");
-		exit(1);
-	}
 }
 
-void mesh::set_zero_DOF() { // TODO: This is slow for large n!
+/** Sets boundary conditions in the matrix involved in the time-integration linear solve. */
+// TODO : Add the capability to check the scale of entries in the matrix to determine the 
+//		the appropriate diagonal element in a boundary row/column.
+void mesh::set_zero_DOF(Eigen::SparseMatrix<double, Eigen::RowMajor> &Mat) { // TODO: This is slow!!
 	int *edp=eom;
 	for(int i=0;i<n;i++) {
         while(edp<eo[i+1]) { // Boundary edges
@@ -559,47 +559,46 @@ void mesh::set_zero_DOF() { // TODO: This is slow for large n!
 				if(dx==0) {
 					for(int k=0;k<6;k++) if(k!=3) { // Don't include xx-derivative!
 						int ii=6*i+k, ij=6*(*edp)+k;
-						for (int j=0;j<M_sp.cols();++j) {
+						for (int j=0;j<Mat.cols();++j) {
 							// Zero out the row for both edge endpoints
-							M_sp.coeffRef(ii,j)=0.;
-							M_sp.coeffRef(ij,j)=0.;
+							Mat.coeffRef(ii,j)=0.;
+							Mat.coeffRef(ij,j)=0.;
 							// Zero out the column
-							M_sp.coeffRef(j,ii)=0.;
-							M_sp.coeffRef(j,ij)=0.;
+							Mat.coeffRef(j,ii)=0.;
+							Mat.coeffRef(j,ij)=0.;
 						}
-						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
+						Mat.coeffRef(ii,ii)=1.; Mat.coeffRef(ij,ij)=1.; 
 					}
 				}
 				else if(dy==0) {
 					for(int k=0;k<5;k++) { // Don't include yy-derivative!
 						int ii=6*i+k, ij=6*(*edp)+k;
-						for (int j=0;j<M_sp.cols();++j) {
+						for (int j=0;j<Mat.cols();++j) {
 							// Zero out the row for both edge endpoints
-							M_sp.coeffRef(ii,j)=0.;
-							M_sp.coeffRef(ij,j)=0.;
+							Mat.coeffRef(ii,j)=0.;
+							Mat.coeffRef(ij,j)=0.;
 							// Zero out the column
-							M_sp.coeffRef(j,ii)=0.;
-							M_sp.coeffRef(j,ij)=0.;
+							Mat.coeffRef(j,ii)=0.;
+							Mat.coeffRef(j,ij)=0.;
 						}
-						M_sp.coeffRef(ii,ii)=1.; M_sp.coeffRef(ij,ij)=1.; 
+						Mat.coeffRef(ii,ii)=1.; Mat.coeffRef(ij,ij)=1.; 
 					}
 				}
 				int edi=6*n+l;
-				for (int j=0;j<M_sp.cols();++j) {
-					M_sp.coeffRef(edi,j)=0.; M_sp.coeffRef(j,edi)=0.;
+				for (int j=0;j<Mat.cols();++j) {
+					Mat.coeffRef(edi,j)=0.; Mat.coeffRef(j,edi)=0.;
 				}
-				M_sp.coeffRef(edi,edi)=1.;
+				Mat.coeffRef(edi,edi)=1.;
 			}
 			edp++;
 		}
 	}
-	printf("Set boundary conditions in M.\n");
+	printf("Set boundary conditions.\n");
 }
 
-/** Assembles the stiffness matrix from the biharmonic term in the FEM computations.
-*	Also checks that the stiffness matrix is positive definite. */
+/** Assembles the stiffness matrix from the biharmonic term in the FEM computations. */
 void mesh::assemble_K() {
-	Kd.resize(Adof2, Adof2);
+	K_sp.resize(Adof2, Adof2);
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
 	// Get (estimated) memory up front for performance
@@ -647,7 +646,7 @@ void mesh::assemble_K() {
 			top+=5; tri+=1;
 		}
 	// Convert triplets list to SparseMatrix.
-	Kd.setFromTriplets(triplets.begin(), triplets.end());
+	K_sp.setFromTriplets(triplets.begin(), triplets.end());
 	printf("Assembled K.\n");
 }
 
@@ -986,7 +985,7 @@ void mesh::print_pts(double *pt_array) {
 }
 
 void mesh::checkK(std::ofstream& File) {
-	Eigen::MatrixXd K_dense(Kd);
+	Eigen::MatrixXd K_dense(K_sp);
 	for (int i=0;i<K_dense.rows();i++) {
 		for (int j=0;j<K_dense.cols();j++) {
 			double diff = abs(K_dense(i,j) - K_dense(j,i));
@@ -1025,7 +1024,7 @@ void mesh::check_kernel_K() {
     output_topology(eval_obuf);
 
 	// Identify the eigenvalues smaller than a tolerance value
-	Eigen::MatrixXd K_dense(Kd);
+	Eigen::MatrixXd K_dense(K_sp);
 	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Kcheck(K_dense);
 	const double tol = 1e-16;
 	Eigen::VectorXd evals = Kcheck.eigenvalues();
@@ -1055,33 +1054,12 @@ void mesh::check_kernel_K() {
 	delete [] eval_odir;
 }
 
-void mesh::checkM_SPD() {
-	Eigen::MatrixXd M_dense(M_sp);
-
-	Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> Mcheck(M_dense);
-	std::cout << "Smallest eigenvalues of M:\n" << Mcheck.eigenvalues().head(5) << '\n';
-/*	if ((Mcheck.eigenvalues().head(5).real().array() < 1e-5).any()) {
-		printf("At least one of the eigenvalues of the mass matrix is close to 0.\n");
-	}
-
-	// Investigate the eigenvectors of M corresponding to small eigenvalues
-	const double tol = 1e-4;
-    std::vector<Eigen::VectorXd> evecs;
-
-    for (int i=0;i<Mcheck.eigenvalues().size(); ++i) {
-        if (std::abs(Mcheck.eigenvalues()[i]) < tol) {
-            evecs.push_back(Mcheck.eigenvectors().col(i));
-            std::cout << "Small M eigenvalue: " << Mcheck.eigenvalues()[i] << "\n";
-        }
-    }*/
-}
-
 void mesh::stability_diagnostic() {
 	printf("\n....Entering stability diagnostic....\n");
 	// Investigate spectral radius of the linear system.
 	// Look for lambda_max, Kx = lambda Mx
 	// => M^{-1}Kx = lambda x 
-	Eigen::MatrixXd K_dense(Kd);
+	Eigen::MatrixXd K_dense(K_sp);
 	Eigen::MatrixXd M_dense(M_sp);
 	// Debug
 	std::ofstream outputFile("Mass matrix.csv");
@@ -1118,17 +1096,15 @@ void mesh::stability_diagnostic() {
 void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
-
 	// Add biharmonic term from FEM computations
-	Kq_multiply(in);
+	Eigen::VectorXd Kq;
+	Kq_multiply(in,Kq);
 
 	Eigen::VectorXd f_sum(Adof2), av(Adof2);
 	double *vp=in+Adof2;
 	for (i=0;i<Adof2;i++)
 		f_sum[i] = -Kq[i]-drag*vp[i];
-
-	// Zero out boundary DOFs on the RHS
-	// Also manually set velocity to 0
+	// Zero out the boundary velocity and DOFs on the RHS
 	int *edp=eom;
 	for(i=0;i<n;i++) while(edp<eo[i+1]) {
 		if(ncn[i]&bflag && ncn[*edp]&bflag) {
@@ -1143,7 +1119,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
 				}
 			}
-			else if(dy==0) {
+			else if(dy==0) { // Horizontal edge
 				for(int k=0;k<5;k++) {
 					f_sum[6*i+k]=0.; f_sum[6*(*edp)+k]=0.;
 					in[Adof2+6*i+k]=0.; in[Adof2+6*(*edp)+k]=0.;
@@ -1156,31 +1132,124 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	}
 
 	// Cholesky direct solver, a = M^-1*f
-	av=Msolver.solve(f_sum);
-	if (Msolver.info()!=Eigen::Success) {
+	av=Asolver.solve(f_sum);
+	if (Asolver.info()!=Eigen::Success) {
 		printf("Matrix solving failed\n");
 		exit(1);
 	}
 	std::memcpy(acc,av.data(),Adof2*sizeof(double));
 	
 	// Assemble the velocities in the first part of the out array. 
-	for(i=0;i<n;i++)
-		for(int k=0;k<6;k++) {
-			out[6*i+k]=in[Adof2+6*i+k];
+	for(i=0;i<Adof2;i++) out[i]=in[Adof2+i];
+}
+
+/** Defines the matrix involved in the solve for the implicit linear trapezoid solver. */
+void mesh::mesh_mat_assemble(double dt) {
+	double m=dt/2;
+	// Define the matrix for the linear solve
+	Eigen::SparseMatrix<double,Eigen::RowMajor> A(Adof2,Adof2);
+	Eigen::SparseMatrix<double,Eigen::RowMajor> I(Adof2,Adof2);
+	I.setIdentity();
+	A = (2/dt)*M_sp + drag*I + m*K_sp;
+	// Set boundary conditions in the matrix
+	//set_zero_DOF(A); TODO : Uncomment this?
+	// Check that A is sparse enough to continue.
+	double density = static_cast<double>(A.nonZeros()) / A.size();
+	if (density > 0.05) {
+		printf("The implicit solver matrix sparsity is equal to %g.\n",density);
+	}
+
+	// Factorize sparse matrix using the LLT Cholesky factorization
+	Asolver.analyzePattern(A);
+	Asolver.factorize(A);
+	if (Asolver.info()!=Eigen::Success) {
+		printf("Mass matrix factorization failed\n");
+		exit(1);
+	}
+}
+
+/** Computes the right-hand side of the implicit solve (for a linear problem) */
+// TODO : Check that this works.
+void mesh::mesh_FF(double dt,double t_,double *in,double *out) {
+	double m=dt/2, *dv=out+Adof2, *v=in+Adof2;
+	int i;
+
+	// First, solve the velocity step
+	Eigen::VectorXd Kq;
+	Kq_multiply(in,Kq);
+	Eigen::VectorXd f_sum(Adof2), dv_e(Adof2);
+	for (i=0;i<Adof2;i++)
+		f_sum[i] = -(dt+2)*Kq[i]-2*drag*v[i];
+	// Zero out the boundary DOFs on the RHS
+	int *edp=eom;
+	for(i=0;i<n;i++) while(edp<eo[i+1]) {
+		if(ncn[i]&bflag && ncn[*edp]&bflag) {
+			double  *v1=xyz+3*i, x1=*v1, y1=v1[1],
+					*v2=xyz+3*(*edp), x2=*v2, y2=v2[1];
+			// Define the edge vector
+			double dx=x2-x1, dy=y2-y1;
+			int l=edge_lookup(i,*edp);
+			if(dx==0) { // Vertical edge
+				for(int k=0;k<6;k++) if(k!=3) {
+					f_sum[6*i+k]=0.; f_sum[6*(*edp)+k]=0.;
+				}
+			}
+			else if(dy==0) { // Horizontal edge
+				for(int k=0;k<5;k++) {
+					f_sum[6*i+k]=0.; f_sum[6*(*edp)+k]=0.;
+				}
+			}
+			f_sum[6*n+l]=0.;
 		}
-	for (i=0;i<ns;i++) out[6*n+i]=in[Adof2+6*n+i];
+		edp++;
+	}
+	// Do the solve
+	dv_e=Asolver.solve(f_sum);
+	if (Asolver.info()!=Eigen::Success) {
+		printf("Matrix solving failed\n");
+		exit(1);
+	}
+	std::memcpy(dv,dv_e.data(),Adof2*sizeof(double));
+
+	// Second, solve the position step, setting dx=0 if on a boundary
+	// TODO : is there some way to condense this boundary loop and the previous one?
+	edp=eom;
+	for(i=0;i<n;i++) while(edp<eo[i+1]) {
+		int l=edge_lookup(i,*edp), bndry_idx=6*n+l;;
+		if(ncn[i]&bflag && ncn[*edp]&bflag) {
+			double  *v1=xyz+3*i, x1=*v1, y1=v1[1],
+					*v2=xyz+3*(*edp), x2=*v2, y2=v2[1];
+			// Define the edge vector
+			double dx=x2-x1, dy=y2-y1;
+			if(dx==0) { // Vertical edge
+				for(int k=0;k<6;k++) if(k!=3) {
+					out[6*i+k]=0.; out[6*(*edp)+k]=0.;
+				}
+			}
+			else if(dy==0) { // Horizontal edge
+				for(int k=0;k<5;k++) {
+					out[6*i+k]=0.; out[6*(*edp)+k]=0.;
+				}
+			}
+			out[bndry_idx]=0.;
+		}
+		else {
+			for(int k=0;k<6;k++) out[6*i+k]=m*dv[6*i+k]+dt*v[6*i+k];
+			out[bndry_idx]=m*dv[6*n+l]+dt*v[bndry_idx];
+		}
+		edp++;
+	}
 }
 
 /** Computes the biharmonic term from sheet mechanics.
  * \param[in] in the mesh degrees of freedom. */
-void mesh::Kq_multiply(double *in) {
+void mesh::Kq_multiply(double *in,Eigen::VectorXd &Kq) {
 	// Copy "in" into Eigen vector
 	// .eval() creates a copy so that "in" is not modified
 	Eigen::VectorXd in_e = Eigen::Map<Eigen::VectorXd>(in, Adof2).eval();
-	Kq.setZero();
 
 	// Do a matrix-vector product with K
-	Kq = Kd*in_e;
+	Kq = K_sp*in_e;
 }
 
 /** Computes the energy.
