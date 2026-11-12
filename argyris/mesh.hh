@@ -115,7 +115,7 @@ class mesh : public mesh_param {
 		void init_shrink(bool shflag,bool bendflag,bool stflag,double shm,double shv,double bm,double bv,
 			double ksm,double ksv,int nx,int ny);
         void mesh_ff(double t_,double *in,double *out);
-        void mesh_FF(double dt,double t_,double *in,double *out);
+        void mesh_FF(double dt,double *in,double *out);
         void mesh_mat_assemble(double dt);
         void mesh_init() {};
         void mesh_print_dense(int fr,double t_,double *in);
@@ -330,7 +330,7 @@ class mesh_trap : public mesh, public trapezoid {
                     trapezoid() {
             allocate(Adof,pts);
         }
-        virtual void FF(double dt,double t_,double *in,double *out) {mesh_FF(dt,t_,in,out);}
+        virtual void FF(double dt,double *in,double *out) {mesh_FF(dt,in,out);}
         virtual void print_step() {mesh_print_last_step();}
         virtual void mat_assemble(double dt) {mesh_mat_assemble(dt);}
 };

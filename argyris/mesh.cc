@@ -142,7 +142,8 @@ void mesh::setup_fem() {
 }
 
 void mesh::build_matrices() {
-	Eigen::SparseMatrix<double, Eigen::RowMajor> M_sp;
+	M_sp.resize(Adof2,Adof2); K_sp.resize(Adof2, Adof2);
+	M_sp.setZero(); K_sp.setZero();
 	quadrature=false;
 	if (quadrature)
 		setup_quad_matrices();
@@ -183,7 +184,8 @@ void mesh::setup_fem_matrices() {
 	// Build the mass matrix and global stiffness matrix
 	assemble_M();
 	assemble_K();
-
+	// Enforce essential/Dirichlet boundary conditions
+	set_zero_DOF(M_sp);
 	if(!implicit) {
 		Asolver.analyzePattern(M_sp);
 		Asolver.factorize(M_sp);
@@ -192,15 +194,12 @@ void mesh::setup_fem_matrices() {
 			exit(1);
 		}
 		printf("Mass matrix factorized successfully.\n");
-		// Enforce essential/Dirichlet boundary conditions
-		set_zero_DOF(M_sp);
 	}
 	//stability_diagnostic();
 }
 
 /** Assembles the mass matrix using 6-point Gauss-Legendre quadrature. */
 void mesh::assembleM_quad() {
-	M_sp.resize(Adof2,Adof2);
 	// Evaluate each basis function at each Gauss-Legendre point
 	double GL[21][6][6];
 	double phi[21];
@@ -322,7 +321,6 @@ void mesh::assembleK_quad() {
 		}
 	}
 
-	K_sp.resize(Adof2, Adof2);
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> Ktriplets;
 	// Get (estimated) memory up front for performance
@@ -495,7 +493,6 @@ double mesh::laplace(double xxGL[21][6][6],double xyGL[21][6][6],double yyGL[21]
 
 /** Assembles the mass matrix using pre-computed integral values. */
 void mesh::assemble_M() {
-	M_sp.resize(Adof2,Adof2);
 	typedef Eigen::Triplet<double> T; // Use a list of triplets for fast computation
 	std::vector<T> triplets;
 	triplets.reserve(6*Adof2); // Get (estimated) memory up front for performance
@@ -598,7 +595,6 @@ void mesh::set_zero_DOF(Eigen::SparseMatrix<double, Eigen::RowMajor> &Mat) { // 
 
 /** Assembles the stiffness matrix from the biharmonic term in the FEM computations. */
 void mesh::assemble_K() {
-	K_sp.resize(Adof2, Adof2);
 	typedef Eigen::Triplet<double> T;
 	std::vector<T> triplets;
 	// Get (estimated) memory up front for performance
@@ -1097,10 +1093,11 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
     double *acc=out+Adof2;
     int i;
 	// Add biharmonic term from FEM computations
-	Eigen::VectorXd Kq;
+	Eigen::VectorXd Kq=Eigen::VectorXd::Zero(Adof2);
 	Kq_multiply(in,Kq);
 
-	Eigen::VectorXd f_sum(Adof2), av(Adof2);
+	Eigen::VectorXd f_sum=Eigen::VectorXd::Zero(Adof2); 
+	Eigen::VectorXd av=Eigen::VectorXd::Zero(Adof2);
 	double *vp=in+Adof2;
 	for (i=0;i<Adof2;i++)
 		f_sum[i] = -Kq[i]-drag*vp[i];
@@ -1143,7 +1140,7 @@ void mesh::mesh_ff(double t_,double *in,double *out) {
 	for(i=0;i<Adof2;i++) out[i]=in[Adof2+i];
 }
 
-/** Defines the matrix involved in the solve for the implicit linear trapezoid solver. */
+/** Defines the LHS matrix involved in the solve for the implicit linear trapezoid solver. */
 void mesh::mesh_mat_assemble(double dt) {
 	double m=dt/2;
 	// Define the matrix for the linear solve
@@ -1152,7 +1149,7 @@ void mesh::mesh_mat_assemble(double dt) {
 	I.setIdentity();
 	A = (2/dt)*M_sp + drag*I + m*K_sp;
 	// Set boundary conditions in the matrix
-	//set_zero_DOF(A); TODO : Uncomment this?
+	set_zero_DOF(A);
 	// Check that A is sparse enough to continue.
 	double density = static_cast<double>(A.nonZeros()) / A.size();
 	if (density > 0.05) {
@@ -1169,15 +1166,15 @@ void mesh::mesh_mat_assemble(double dt) {
 }
 
 /** Computes the right-hand side of the implicit solve (for a linear problem) */
-// TODO : Check that this works.
-void mesh::mesh_FF(double dt,double t_,double *in,double *out) {
-	double m=dt/2, *dv=out+Adof2, *v=in+Adof2;
+void mesh::mesh_FF(double dt,double *in,double *out) {
+	double m=dt/2, *acc=out+Adof2, *v=in+Adof2;
 	int i;
 
 	// First, solve the velocity step
-	Eigen::VectorXd Kq;
+	Eigen::VectorXd Kq=Eigen::VectorXd::Zero(Adof2);
 	Kq_multiply(in,Kq);
-	Eigen::VectorXd f_sum(Adof2), dv_e(Adof2);
+	Eigen::VectorXd f_sum=Eigen::VectorXd::Zero(Adof2);
+	Eigen::VectorXd dv_e=Eigen::VectorXd::Zero(Adof2);
 	for (i=0;i<Adof2;i++)
 		f_sum[i] = -(dt+2)*Kq[i]-2*drag*v[i];
 	// Zero out the boundary DOFs on the RHS
@@ -1209,18 +1206,19 @@ void mesh::mesh_FF(double dt,double t_,double *in,double *out) {
 		printf("Matrix solving failed\n");
 		exit(1);
 	}
-	std::memcpy(dv,dv_e.data(),Adof2*sizeof(double));
+	std::memcpy(acc,dv_e.data(),Adof2*sizeof(double));
 
-	// Second, solve the position step, setting dx=0 if on a boundary
+	// Second, solve the position step, setting v=0 if on a boundary
+	for(i=0;i<Adof2;i++) out[i]=m*acc[i]+dt*v[i];
 	// TODO : is there some way to condense this boundary loop and the previous one?
 	edp=eom;
 	for(i=0;i<n;i++) while(edp<eo[i+1]) {
-		int l=edge_lookup(i,*edp), bndry_idx=6*n+l;;
 		if(ncn[i]&bflag && ncn[*edp]&bflag) {
 			double  *v1=xyz+3*i, x1=*v1, y1=v1[1],
 					*v2=xyz+3*(*edp), x2=*v2, y2=v2[1];
 			// Define the edge vector
 			double dx=x2-x1, dy=y2-y1;
+			int l=edge_lookup(i,*edp);
 			if(dx==0) { // Vertical edge
 				for(int k=0;k<6;k++) if(k!=3) {
 					out[6*i+k]=0.; out[6*(*edp)+k]=0.;
@@ -1231,11 +1229,7 @@ void mesh::mesh_FF(double dt,double t_,double *in,double *out) {
 					out[6*i+k]=0.; out[6*(*edp)+k]=0.;
 				}
 			}
-			out[bndry_idx]=0.;
-		}
-		else {
-			for(int k=0;k<6;k++) out[6*i+k]=m*dv[6*i+k]+dt*v[6*i+k];
-			out[bndry_idx]=m*dv[6*n+l]+dt*v[bndry_idx];
+			out[6*n+l]=0.;
 		}
 		edp++;
 	}

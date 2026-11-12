@@ -5,15 +5,17 @@ class trapezoid {
     public:
         /** The total number of degrees of freedom in the ODE system. */
         int dof;
+         /** Whether the underlying problem is linear or not. */
+        bool linear;
+        /** A counter for the number of function evaluations. */
+        int fcount;
+        /** Whether the class allocated its own memory for the solution vector. */
+        bool i_alloc;
         /** The current time. */
         double t;
         /** The solution vector. */
         double *q;
         double *dq;
-        /** Whether the underlying problem is linear or not. */
-        bool linear;
-        /** A counter for the number of function evaluations. */
-        int fcount;
         
         trapezoid(int dof_,bool linear_);
         trapezoid();
@@ -24,12 +26,17 @@ class trapezoid {
             dof=dof_;
             allocate(q_);
         }
+        inline void allocate(int dof_) {
+            dof=dof_;
+            i_alloc=true;
+            allocate(new double[dof]);
+        }
         void solve_fixed_linear(double duration,int iters,bool output=false);
         virtual void mat_assemble(double dt) = 0;
         void fixed_step_linear(double dt);
         void fixed_Newton_step(double dt);
         virtual void print_step();
-        virtual void FF(double dt,double t_,double *in,double *out) = 0;
+        virtual void FF(double dt,double *in,double *out) = 0;
 };
 
 #endif
